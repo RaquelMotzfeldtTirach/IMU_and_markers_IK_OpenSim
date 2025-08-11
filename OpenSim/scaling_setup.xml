@@ -1,0 +1,146 @@
+<?xml version='1.0' encoding='utf-8'?>
+<OpenSimDocument Version="40500">
+	<ScaleTool name="Rajagopal_2015_scaled">
+		
+		<mass>61</mass>
+		
+		<height>1720</height>
+		
+		<age>27</age>
+		
+		<sex>female</sex>
+		
+		<notes>28</notes>
+		
+		<GenericModelMaker>
+			
+			<model_file>Models/Rajagopal/Calibrated_Rajagopal_subject28_elbow.osim</model_file>
+			
+			<marker_set_file>Models/Rajagopal/markers.xml</marker_set_file>
+		</GenericModelMaker>
+		
+		<ModelScaler>
+			
+			<apply>true</apply>
+			
+			<scaling_order />
+			
+			<MeasurementSet>
+				<objects />
+				<groups />
+			</MeasurementSet>
+			
+			<ScaleSet>
+				<objects />
+				<groups />
+			</ScaleSet>
+			
+			<marker_file>webcam_static.trc</marker_file>
+			
+			<time_range> -1 -1</time_range>
+			
+			<preserve_mass_distribution>true</preserve_mass_distribution>
+			
+			<output_model_file>Models/Rajagopal/Calibrated_Rajagopal_subject28_elbow.osim</output_model_file>
+			
+			<output_scale_file>Unassigned</output_scale_file>
+		</ModelScaler>
+		
+		<MarkerPlacer>
+			
+			<apply>false</apply>
+			
+			<IKTaskSet>
+				<objects>
+					<IKMarkerTask name="JOINT_RIGHT_PINKY">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_LEFT_PINKY">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_RIGHT_INDEX">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_LEFT_INDEX">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_RIGHT_SHOULDER">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_LEFT_SHOULDER">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_RIGHT_ELBOW">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_LEFT_ELBOW">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_LEFT_WRIST">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_RIGHT_WRIST">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_RIGHT_HIP">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+					<IKMarkerTask name="JOINT_LEFT_HIP">
+						
+						<apply>true</apply>
+						
+						<weight>1</weight>
+					</IKMarkerTask>
+				</objects>
+				<groups />
+			</IKTaskSet>
+			
+			<marker_file>../recordings/skeleton_ZED_2i_keypoints_subject00_static.trc</marker_file>
+			
+			<coordinate_file>Unassigned</coordinate_file>
+			
+			<time_range>1749044466.119000 1749044469.932000</time_range>
+			
+			<output_motion_file>Unassigned</output_motion_file>
+			
+			<output_model_file>Unassigned</output_model_file>
+			
+			<output_marker_file>Unassigned</output_marker_file>
+			
+			<max_marker_movement>-1</max_marker_movement>
+		</MarkerPlacer>
+	</ScaleTool>
+</OpenSimDocument>
