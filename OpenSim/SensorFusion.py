@@ -102,7 +102,7 @@ class OpenSimSensorFusion:
             markerWeight.setName(str(label))
             ## TO CHANGE LATER
             if i == len(self.webcamMarkerLabels) - 1:  # Last marker gets different weight
-                markerWeight.setWeight(4200)  # Different weight for last marker
+                markerWeight.setWeight(2)  # Different weight for last marker
             else:
                 markerWeight.setWeight(self.webcam_marker_weight)  # Use configured marker weight
             self.webcamMarkerWeights.cloneAndAppend(markerWeight)
@@ -114,7 +114,7 @@ class OpenSimSensorFusion:
             orientationWeight.setName(str(label))
             ## TO CHANGE LATER
             if i == len(self.orientationLabels) - 1:  # Last orientation gets different weight
-                orientationWeight.setWeight(4200)  # Different weight for last orientation
+                orientationWeight.setWeight(0)  # Different weight for last orientation
             else:
                 orientationWeight.setWeight(self.imu_orientation_weight)  # Use configured orientation weight
             self.orientationWeights.cloneAndAppend(orientationWeight)
@@ -185,38 +185,38 @@ class OpenSimSensorFusion:
         
         ## NOT SURE WE NEED THIS PART
         # If correction is too large (> 0.3 radians ~17 degrees), apply only partial correction
-        max_correction = 0.1  # Maximum correction in radians (~17 degrees)
-        if correction_magnitude > max_correction:
-            scale_factor = max_correction / correction_magnitude
-            print(f"Large heading correction detected ({correction_magnitude*180/pi:.1f}°), applying scaled correction ({scale_factor:.2f})")
+        # max_correction = 0.1  # Maximum correction in radians (~17 degrees)
+        # if correction_magnitude > max_correction:
+        #     scale_factor = max_correction / correction_magnitude
+        #     print(f"Large heading correction detected ({correction_magnitude*180/pi:.1f}°), applying scaled correction ({scale_factor:.2f})")
             
-            # Scale down each component
-            scaled_heading_rotation = osim.Rotation()
-            scaled_heading_rotation.setRotationFromAngleAboutAxis(
-                heading_rotation_vec3.get(0) * scale_factor, osim.CoordinateAxis(0))
-            scaled_temp_rotation_y = osim.Rotation()
-            scaled_temp_rotation_y.setRotationFromAngleAboutAxis(
-                heading_rotation_vec3.get(1) * scale_factor, osim.CoordinateAxis(1))
-            scaled_temp_rotation_z = osim.Rotation()
-            scaled_temp_rotation_z.setRotationFromAngleAboutAxis(
-                heading_rotation_vec3.get(2) * scale_factor, osim.CoordinateAxis(2))
+        #     # Scale down each component
+        #     scaled_heading_rotation = osim.Rotation()
+        #     scaled_heading_rotation.setRotationFromAngleAboutAxis(
+        #         heading_rotation_vec3.get(0) * scale_factor, osim.CoordinateAxis(0))
+        #     scaled_temp_rotation_y = osim.Rotation()
+        #     scaled_temp_rotation_y.setRotationFromAngleAboutAxis(
+        #         heading_rotation_vec3.get(1) * scale_factor, osim.CoordinateAxis(1))
+        #     scaled_temp_rotation_z = osim.Rotation()
+        #     scaled_temp_rotation_z.setRotationFromAngleAboutAxis(
+        #         heading_rotation_vec3.get(2) * scale_factor, osim.CoordinateAxis(2))
             
-            # Apply scaled corrections
-            osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_heading_rotation)  # X rotation
-            osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_temp_rotation_y)  # Y rotation  
-            osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_temp_rotation_z)  # Z rotation
+        #     # Apply scaled corrections
+        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_heading_rotation)  # X rotation
+        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_temp_rotation_y)  # Y rotation  
+        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_temp_rotation_z)  # Z rotation
             
-            print(f"Applied scaled heading correction: X={heading_rotation_vec3.get(0)*scale_factor*180/pi:.1f}°, "
-                f"Y={heading_rotation_vec3.get(1)*scale_factor*180/pi:.1f}°, "
-                f"Z={heading_rotation_vec3.get(2)*scale_factor*180/pi:.1f}°")
-        else:
-            # Apply full correction for small corrections
-            osim.OpenSenseUtilities.rotateOrientationTable(quatTable, heading_rotation)  # X rotation
-            osim.OpenSenseUtilities.rotateOrientationTable(quatTable, temp_rotation_y)  # Y rotation  
-            osim.OpenSenseUtilities.rotateOrientationTable(quatTable, temp_rotation_z)  # Z rotation
-            print(f"Applied full heading correction: X={heading_rotation_vec3.get(0)*180/pi:.1f}°, "
-                f"Y={heading_rotation_vec3.get(1)*180/pi:.1f}°, "
-                f"Z={heading_rotation_vec3.get(2)*180/pi:.1f}°")
+        #     print(f"Applied scaled heading correction: X={heading_rotation_vec3.get(0)*scale_factor*180/pi:.1f}°, "
+        #         f"Y={heading_rotation_vec3.get(1)*scale_factor*180/pi:.1f}°, "
+        #         f"Z={heading_rotation_vec3.get(2)*scale_factor*180/pi:.1f}°")
+        # else:
+        #     # Apply full correction for small corrections
+        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, heading_rotation)  # X rotation
+        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, temp_rotation_y)  # Y rotation  
+        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, temp_rotation_z)  # Z rotation
+        #     print(f"Applied full heading correction: X={heading_rotation_vec3.get(0)*180/pi:.1f}°, "
+        #         f"Y={heading_rotation_vec3.get(1)*180/pi:.1f}°, "
+        #         f"Z={heading_rotation_vec3.get(2)*180/pi:.1f}°")
         orientationData = osim.OpenSenseUtilities.convertQuaternionsToRotations(quatTable)
 
         self.orientationQuatTable = orientationData
@@ -267,7 +267,7 @@ def main():
 
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    sensor_fusion.set_weights(5,1,1,1)
+    sensor_fusion.set_weights(1,0,1,1)
 
     # Calibrate the model
     calibrated_model_path = sensor_fusion.calibrate_model(orientationsFileName)
@@ -303,7 +303,7 @@ def main():
         
     # Create the solver
     coordinateReferences = osim.SimTKArrayCoordinateReference()
-    ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, mRefs, oRefs, coordinateReferences) # No constraint variable means Infinite weight 
+    ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, mRefs, oRefs, coordinateReferences) # No constraint variable means Infinite weight, so the joint limits ahev to be applied
     accuracy = 1e-9  # Same as C++ implementation, probably default value
     ikSolver.setAccuracy(accuracy)
     print(f"\n=== SOLVER CONFIGURATION ANALYSIS ===")
@@ -388,7 +388,6 @@ def main():
     storage.setColumnLabels(labels) 
 
 
-    
     # Initialize the solver at the first time point (matching C++ implementation)
     # Use the first time from our filtered times array
     first_time = times[0]
@@ -405,6 +404,68 @@ def main():
     # Start timing
     start_time = time.time() 
     
+    # Create storage objects for error tracking (similar to OpenSim C++ implementation)
+    marker_errors_storage = None
+    orientation_errors_storage = None
+    combined_errors_storage = None
+    
+    # Initialize marker error storage if markers are used
+    if sensor_fusion.webcam_marker_weight > 0:
+        marker_errors_storage = osim.Storage()
+        marker_errors_storage.setName("Model Marker Errors from IK")
+        marker_errors_storage.setInDegrees(False)  # Errors are in meters
+        
+        # Set column labels following OpenSim C++ pattern
+        marker_labels = osim.ArrayStr()
+        marker_labels.append("time")
+        marker_labels.append("total_squared_error")
+        marker_labels.append("marker_error_RMS")
+        marker_labels.append("marker_error_max")
+        
+        # Add individual marker error columns
+        for label in sensor_fusion.webcamMarkerLabels:
+            marker_labels.append(f"{str(label)}_error")
+            
+        marker_errors_storage.setColumnLabels(marker_labels)
+        
+    # Initialize orientation error storage if orientations are used
+    if sensor_fusion.imu_orientation_weight > 0:
+        orientation_errors_storage = osim.Storage()
+        orientation_errors_storage.setName("Model Orientation Errors from IK")
+        orientation_errors_storage.setInDegrees(True)  # Convert radians to degrees
+        
+        # Set column labels
+        orient_labels = osim.ArrayStr()
+        orient_labels.append("time")
+        orient_labels.append("total_squared_error")
+        orient_labels.append("orientation_error_RMS")
+        orient_labels.append("orientation_error_max")
+        
+        # Add individual orientation error columns
+        for label in sensor_fusion.orientationLabels:
+            orient_labels.append(f"{str(label)}_error")
+            
+        orientation_errors_storage.setColumnLabels(orient_labels)
+    
+    # Initialize combined error storage
+    combined_errors_storage = osim.Storage()
+    combined_errors_storage.setName("Combined IK Errors")
+    combined_errors_storage.setInDegrees(False)
+    
+    combined_labels = osim.ArrayStr()
+    combined_labels.append("time")
+    combined_labels.append("total_cost")
+    combined_labels.append("marker_total_squared_error")
+    combined_labels.append("orientation_total_squared_error")
+    combined_labels.append("marker_rms_error")
+    combined_labels.append("marker_max_error")
+    combined_labels.append("orientation_rms_error_deg")
+    combined_labels.append("orientation_max_error_deg")
+    combined_labels.append("num_markers")
+    combined_labels.append("num_orientations")
+    
+    combined_errors_storage.setColumnLabels(combined_labels)
+    
     # Process each time frame
     print(f"Processing {numTimeSteps} frames...")
     
@@ -419,6 +480,113 @@ def main():
         # Track for this time step (assemble is called internally by track)
         ikSolver.track(sensor_fusion.s) 
     
+        # === COMPUTE AND STORE ERRORS (following OpenSim C++ pattern) ===
+        
+        # Marker errors
+        marker_total_squared_error = 0.0
+        marker_rms = 0.0
+        marker_max = 0.0
+        num_markers = 0
+        individual_marker_errors = []
+        
+        if sensor_fusion.webcam_marker_weight > 0:
+            try:
+                marker_errors = osim.SimTKArrayDouble()
+                ikSolver.computeCurrentSquaredMarkerErrors(marker_errors)
+                
+                if marker_errors.size() > 0:
+                    num_markers = marker_errors.size()
+                    max_squared_error = 0.0
+                    
+                    # Calculate statistics following OpenSim C++ implementation
+                    for j in range(marker_errors.size()):
+                        squared_error = marker_errors.getElt(j)
+                        marker_total_squared_error += squared_error
+                        individual_marker_errors.append(math.sqrt(squared_error))
+                        
+                        if squared_error > max_squared_error:
+                            max_squared_error = squared_error
+                    
+                    marker_rms = math.sqrt(marker_total_squared_error / num_markers) if num_markers > 0 else 0
+                    marker_max = math.sqrt(max_squared_error)
+                    
+                    # Save marker error data
+                    if marker_errors_storage:
+                        marker_data = osim.ArrayDouble()
+                        marker_data.append(marker_total_squared_error)
+                        marker_data.append(marker_rms)
+                        marker_data.append(marker_max)
+                        
+                        # Add individual marker errors
+                        for error in individual_marker_errors:
+                            marker_data.append(error)
+                            
+                        marker_errors_storage.append(time_val, marker_data)
+                        
+            except Exception as e:
+                print(f"Warning: Could not compute marker errors at time {time_val}: {e}")
+        
+        # Orientation errors
+        orientation_total_squared_error = 0.0
+        orientation_rms = 0.0
+        orientation_max = 0.0
+        num_orientations = 0
+        individual_orientation_errors = []
+        
+        if sensor_fusion.imu_orientation_weight > 0:
+            try:
+                orientation_errors = osim.SimTKArrayDouble()
+                ikSolver.computeCurrentOrientationErrors(orientation_errors)
+                
+                if orientation_errors.size() > 0:
+                    num_orientations = orientation_errors.size()
+                    max_squared_error = 0.0
+                    
+                    # Calculate statistics
+                    for j in range(orientation_errors.size()):
+                        error = orientation_errors.getElt(j)
+                        squared_error = error * error
+                        orientation_total_squared_error += squared_error
+                        individual_orientation_errors.append(error)
+                        
+                        if squared_error > max_squared_error:
+                            max_squared_error = squared_error
+                    
+                    orientation_rms = math.sqrt(orientation_total_squared_error / num_orientations) if num_orientations > 0 else 0
+                    orientation_max = math.sqrt(max_squared_error)
+                    
+                    # Save orientation error data
+                    if orientation_errors_storage:
+                        orient_data = osim.ArrayDouble()
+                        orient_data.append(orientation_total_squared_error)
+                        orient_data.append(orientation_rms * 180.0 / pi)  # Convert to degrees
+                        orient_data.append(orientation_max * 180.0 / pi)  # Convert to degrees
+                        
+                        # Add individual orientation errors (in degrees)
+                        for error in individual_orientation_errors:
+                            orient_data.append(error * 180.0 / pi)
+                            
+                        orientation_errors_storage.append(time_val, orient_data)
+                        
+            except Exception as e:
+                print(f"Warning: Could not compute orientation errors at time {time_val}: {e}")
+        
+        # Combined errors
+        total_cost = marker_total_squared_error + orientation_total_squared_error
+        
+        combined_data = osim.ArrayDouble()
+        combined_data.append(total_cost)
+        combined_data.append(marker_total_squared_error)
+        combined_data.append(orientation_total_squared_error)
+        combined_data.append(marker_rms)
+        combined_data.append(marker_max)
+        combined_data.append(orientation_rms * 180.0 / pi if orientation_rms > 0 else 0.0)  # Convert to degrees
+        combined_data.append(orientation_max * 180.0 / pi if orientation_max > 0 else 0.0)  # Convert to degrees
+        combined_data.append(float(num_markers))
+        combined_data.append(float(num_orientations))
+        
+        combined_errors_storage.append(time_val, combined_data)
+        
         # Get coordinate values from the state and convert rotational coordinates to degrees
         coordValues = osim.Vector(numCoords, 0.0)   # Initialize with size and default value
         for j in range(numCoords):
@@ -440,9 +608,54 @@ def main():
     elapsed_time = end_time - start_time 
     print(f"IK processing completed for {numTimeSteps} frames in {elapsed_time:.2f} seconds.")
     
+    # Save all error files (following OpenSim C++ pattern)
+    trial_name = f"subject{sensor_fusion.subject_ID}_{sensor_fusion.trial_ID}"
+    
+    try:
+        # Save marker errors
+        if marker_errors_storage and sensor_fusion.webcam_marker_weight > 0:
+            marker_filename = f"{trial_name}_ik_marker_errors"
+            osim.Storage.printResult(marker_errors_storage, marker_filename, resultsDirectory, -1, ".mot")
+            print(f"✓ Saved marker errors to: {resultsDirectory}/{marker_filename}.mot")
+        
+        # Save orientation errors  
+        if orientation_errors_storage and sensor_fusion.imu_orientation_weight > 0:
+            orientation_filename = f"{trial_name}_ik_orientation_errors"
+            osim.Storage.printResult(orientation_errors_storage, orientation_filename, resultsDirectory, -1, ".mot")
+            print(f"✓ Saved orientation errors to: {resultsDirectory}/{orientation_filename}.mot")
+        
+        # Save combined errors
+        combined_filename = f"{trial_name}_ik_combined_errors"
+        osim.Storage.printResult(combined_errors_storage, combined_filename, resultsDirectory, -1, ".mot")
+        print(f"✓ Saved combined errors to: {resultsDirectory}/{combined_filename}.mot")
+        
+        # Print summary statistics (following OpenSim C++ logging pattern)
+        if sensor_fusion.webcam_marker_weight > 0 and num_markers > 0:
+            print(f"\n=== FINAL ERROR SUMMARY ===")
+            print(f"Markers: {num_markers} tracked")
+            print(f"Marker weights:")
+            for weight in sensor_fusion.webcamMarkerWeights:
+                print(f"{weight.getWeight()}")
+            print(f"  - Final RMS error: {marker_rms:.6f} m")
+            print(f"  - Final max error: {marker_max:.6f} m")
+            print(f"  - Total squared error: {marker_total_squared_error:.8f}")
+            
+        if sensor_fusion.imu_orientation_weight > 0 and num_orientations > 0:
+            print(f"Orientations: {num_orientations} tracked")  
+            print(f"Orientation weights:")
+            for weight in sensor_fusion.orientationWeights:
+                print(f"{weight.getWeight()}")
+            print(f"  - Final RMS error: {orientation_rms*180/pi:.4f}°")
+            print(f"  - Final max error: {orientation_max*180/pi:.4f}°")
+            print(f"  - Total squared error: {orientation_total_squared_error:.8f}")
+            
+        print(f"Total final cost: {total_cost:.8f}")
+        print("="*60)
+        
+    except Exception as e:
+        print(f"Error saving error files: {e}")
 
-
-    # Save results as .mot file
+    # Save main results as .mot file
     motFileName = resultsDirectory + "/inverse_kinematics_results.mot"
     storage.printResult(storage, "inverse_kinematics_results", resultsDirectory, -1, ".mot")
     print(f"Results saved to: {motFileName}")
