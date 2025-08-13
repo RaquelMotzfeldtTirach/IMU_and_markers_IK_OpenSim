@@ -1,6 +1,7 @@
 import opensim as osim
 import xml.etree.ElementTree as ET
 import os
+import argparse
 
 
 def load_model(model_path):
@@ -9,7 +10,7 @@ def load_model(model_path):
     print("Name of the model:", model.getName())
     return model
 
-def create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file):
+def create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path):
     """Create a configuration file for the Scale Tool."""
     tree = ET.parse(config_template_path)
     root = tree.getroot()
@@ -21,10 +22,12 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         tag.find('mass').text = subject_mass  
         scaler = tag.find('ModelScaler')
         scaler.find('marker_file').text = static_trial_path  
-        scaler.find('output_model_file').text = output_model_file  
+        scaler.find('output_model_file').text = output_model_file 
+        scaler = tag.find('GenericModelMaker')
+        scaler.find('model_file').text = "../../" + model_path
 
 
-    new_file_path = 'recordings/subject'+ subject_ID +'/scaling_setup.xml'
+    new_file_path = 'recordings/subject'+ subject_ID +'/scaling_setup_'+ mvt_ID +'.xml'
     tree.write(new_file_path, encoding='utf-8', xml_declaration=True)
     return new_file_path
 
@@ -60,52 +63,19 @@ def run_scaling(scale_tool):
     print("Scaling completed.")
 
 
-def extract_timestamps(trial_file_path):
-    start_time = None
-    end_time = None
-    with open(trial_file_path, 'r') as file:
-        line_count = 0
-        for line in file:
-            line = line.strip()
-            # Skip first 6 lines
-            if line_count < 6:
-                line_count += 1
-                continue
-            
-            # Check if the line starts with a frame number (indicates a data line)
-            if line[0].isdigit():
-                parts = line.split('\t')  # Split by tab; adjust if using a different delimiter
-                if len(parts) > 1:
-                    timestamp = float(parts[1])  # Convert the timestamp string to float
-                    # Initialize start_timestamp and update end_timestamp
-                    if start_time is None:
-                        start_time = timestamp
-                    end_time = timestamp  # Update every time we read a line
-            line_count += 1
-
-    return start_time, end_time
-
-
-def main():
+def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_sex, model_path):
     """Main entry point of the script."""
-    model_path = 'OpenSim/models/Rajagopal/Rajagopal_2015.osim'
     config_template_path = 'OpenSim/scaling_setup_template.xml'
 
     # Load the model
     model = load_model(model_path)
 
-    # Get subject information
-    subject_ID = input("Enter subject ID: ")
-    subject_mass = input("Enter subject mass (kg): ")
-    subject_height = input("Enter subject height (mm): ")
-    subject_age = input("Enter subject age (years): ")
-    subject_sex = input("Enter subject sex (male/female): ")
-    static_trial_path = input("Enter static trial file name (.trc): ")
-
-    output_model_file = "../../OpenSim/models/Rajagopal/Rajagopal_scaled_subject"+subject_ID+".osim"
+    # Define paths
+    static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
+    output_model_file = "../../OpenSim/Models/Rajagopal/Calibrated_Scaled_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
 
     # Create our own config file
-    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file)
+    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path)
     print("Configuration file created at:", config_path)
 
     # Create and configure the Scale Tool
@@ -120,7 +90,20 @@ def main():
     # Run the Scale Tool
     run_scaling(scale_tool)
 
+    return output_model_file
+
     
 
 if __name__ == "__main__":
-    main()
+    # Argparse 
+    parser = argparse.ArgumentParser(description='Scale OpenSim model using webcam data.')
+    parser.add_argument('subject_ID', type=str, help='Subject ID')
+    parser.add_argument('mvt_ID', type=str, help='Movement ID')
+    parser.add_argument('subject_mass', type=str, help='Subject mass in kg')
+    parser.add_argument('subject_height', type=str, help='Subject height in cm')
+    parser.add_argument('subject_age', type=str, help='Subject age in years')
+    parser.add_argument('subject_sex', type=str, help='Subject sex (M/F)')
+    parser.add_argument('model_path', type=str, help='Path to the OpenSim model file')
+    args = parser.parse_args()
+
+    main(args.subject_ID, args.mvt_ID, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex, args.model_path)

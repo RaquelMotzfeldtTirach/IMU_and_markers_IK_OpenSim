@@ -1,9 +1,6 @@
 # TODO:
-# clean the code
-# make the code more modular
 # add support for another camera and set of markers
-# make the weights configurable
-# make the weights individual for each marker and imu
+# change code so another script can be used to run the sensor fusion for different parameters! 
 
 import opensim as osim
 from opensim import Vec3
@@ -15,15 +12,20 @@ import os
 import time
 from OpenSense_CalibrateModel import main as calibrate_model
 from OpenSense_IMUDataConverter import main as convert_imu_data
+from modelScalingWebcam import main as model_scaling_webcam
 
 class OpenSimSensorFusion:
-    def __init__(self, model_path, model_name, subject_ID, trial_ID, sensor_to_opensim_rotation):
+    def __init__(self, model_path, model_name, subject_ID, trial_ID, sensor_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
         self.model_path = model_path
         self.model_name = model_name
         self.model = None
         self.s = None
         self.subject_ID = subject_ID
         self.trial_ID = trial_ID
+        self.subject_mass = subject_mass
+        self.subject_height = subject_height
+        self.subject_age = subject_age
+        self.subject_sex = subject_sex
         self.webcam_marker_weight = None
         self.imu_orientation_weight = None
         self.stereocamera_marker_weight = None
@@ -74,25 +76,19 @@ class OpenSimSensorFusion:
         # IMU calibration
         calibrated_model_path = calibrate_model(self.model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID)
         # Webcam scaling and marker placement
-        scale_tool = osim.ScaleTool("OpenSim/scaling_setup.xml")
-        generic_model_maker = scale_tool.getGenericModelMaker()
-        print("Marker Set File Name:", generic_model_maker.getMarkerSetFileName())
-        static_trial = scale_tool.getModelScaler()
-        print("Model Scaler File Name:", static_trial.getMarkerFileName())
-        model_path = scale_tool.getGenericModelMaker().getModelFileName()
-        print("Model File Name:", model_path)
-        scale_tool.run()
+        calibrated_scaled_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+        calibrated_scaled_model_path = calibrated_scaled_model_path.removeprefix("../../")
 
-        self.model = osim.Model(calibrated_model_path)
+        self.model = osim.Model(calibrated_scaled_model_path)
         self.s = self.model.initSystem()  
 
-        return calibrated_model_path
+        return calibrated_scaled_model_path
 
-    def set_weights(self, webcam_marker_weight, imu_orientation_weight, stereocamera_marker_weight, constraint_var):
-        self.webcam_marker_weight = webcam_marker_weight
-        self.imu_orientation_weight = imu_orientation_weight
+    def set_weights(self, webcam_weights, orientation_weights, stereocamera_marker_weight, constraint_var):
+        self.webcam_marker_weight = webcam_weights
+        self.imu_orientation_weight = orientation_weights
         self.stereocamera_marker_weight = stereocamera_marker_weight
-        self.constraint_var = constraint_var
+        self.constraint_var = constraint_var # will actually be infinity
 
         # Create marker weights using the correct OpenSim API pattern
         # Give markers higher weight to prioritize marker data over IMU orientations
@@ -100,11 +96,7 @@ class OpenSimSensorFusion:
         for i, label in enumerate(self.webcamMarkerLabels):
             markerWeight = osim.MarkerWeight()
             markerWeight.setName(str(label))
-            ## TO CHANGE LATER
-            if i == len(self.webcamMarkerLabels) - 1:  # Last marker gets different weight
-                markerWeight.setWeight(2)  # Different weight for last marker
-            else:
-                markerWeight.setWeight(self.webcam_marker_weight)  # Use configured marker weight
+            markerWeight.setWeight(self.webcam_marker_weight[i])
             self.webcamMarkerWeights.cloneAndAppend(markerWeight)
 
         # Create orientation weights
@@ -112,11 +104,7 @@ class OpenSimSensorFusion:
         for i, label in enumerate(self.orientationLabels):
             orientationWeight = osim.OrientationWeight()
             orientationWeight.setName(str(label))
-            ## TO CHANGE LATER
-            if i == len(self.orientationLabels) - 1:  # Last orientation gets different weight
-                orientationWeight.setWeight(0)  # Different weight for last orientation
-            else:
-                orientationWeight.setWeight(self.imu_orientation_weight)  # Use configured orientation weight
+            orientationWeight.setWeight(self.imu_orientation_weight[i])
             self.orientationWeights.cloneAndAppend(orientationWeight)
 
         print(f"Webcam marker weight: {self.webcam_marker_weight}")
@@ -251,10 +239,14 @@ def main():
 
     subject_ID = input("Enter the subject ID: ")
     trial_ID = input("Enter the trial ID (movement name): ")
+    subject_mass = input("Enter the subject mass (kg): ")
+    subject_height = input("Enter the subject height (cm): ")
+    subject_age = input("Enter the subject age (years): ")
+    subject_sex = input("Enter the subject sex (M/F): ")
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
     sensor_to_opensim_rotation = Vec3(-pi/2, 52*pi/180, 0)  # The rotation of IMU data to the OpenSim world frame
-    sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, sensor_to_opensim_rotation)
+    sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, sensor_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
     sensor_fusion.resultsDirectory = 'FusionIKResults'
 
     # Get IMU data
@@ -267,7 +259,13 @@ def main():
 
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    sensor_fusion.set_weights(1,0,1,1)
+    webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 1, 1, 10, 10]
+    orientation_weights = [10, 10, 10, 10, 10, 10, 1, 1]
+    constraint_var = 1000000000  # infinity basically
+    sensor_fusion.set_weights(webcam_weights, orientation_weights, 1, constraint_var)
+
+    webcam_marker_weight = max(webcam_weights)  # Use the minimum weight for all markers
+    imu_orientation_weight = max(orientation_weights)  # Use the minimum weight for all orientations
 
     # Calibrate the model
     calibrated_model_path = sensor_fusion.calibrate_model(orientationsFileName)
@@ -282,7 +280,7 @@ def main():
 
     # Load the orientation and marker references
     # Create OrientationsReference 
-    if sensor_fusion.imu_orientation_weight == 0:
+    if imu_orientation_weight == 0:
         # Create an empty OrientationsReference to completely disable orientation constraints
         print("Creating EMPTY OrientationsReference to disable all IMU orientation constraints")
         oRefs = osim.OrientationsReference()  # Empty reference - no orientation data
@@ -290,7 +288,7 @@ def main():
         oRefs = osim.OrientationsReference(sensor_fusion.orientationQuatTable, sensor_fusion.orientationWeights) 
         print(f"OrientationsReference created")
     # Create MarkersReference from loaded marker data (following C++ InverseKinematicsTool pattern)
-    if sensor_fusion.webcam_marker_weight == 0:
+    if webcam_marker_weight == 0:
         # Create an empty MarkersReference to completely disable marker constraints
         print("Creating EMPTY MarkersReference to disable all marker constraints")
         mRefs = osim.MarkersReference()  # Empty reference - no marker data
@@ -303,7 +301,11 @@ def main():
         
     # Create the solver
     coordinateReferences = osim.SimTKArrayCoordinateReference()
-    ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, mRefs, oRefs, coordinateReferences) # No constraint variable means Infinite weight, so the joint limits ahev to be applied
+    if sensor_fusion.constraint_var < 10000:
+        ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, mRefs, oRefs, coordinateReferences, sensor_fusion.constraint_var) 
+    else : 
+        # No constraint variable means Infinite weight, so the joint limits ahev to be applied
+        ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, mRefs, oRefs, coordinateReferences)
     accuracy = 1e-9  # Same as C++ implementation, probably default value
     ikSolver.setAccuracy(accuracy)
     print(f"\n=== SOLVER CONFIGURATION ANALYSIS ===")
@@ -322,7 +324,7 @@ def main():
     # Get the actual time range - use overlapping time range for combined mode
     times = sensor_fusion.orientationQuatTable.getIndependentColumn() 
     
-    if sensor_fusion.webcam_marker_weight > 0 and sensor_fusion.imu_orientation_weight > 0:
+    if webcam_marker_weight > 0 and imu_orientation_weight > 0:
         # For combined mode, use the overlapping time range to avoid extrapolation errors
         webcam_marker_times = sensor_fusion.webcamMarkerTable.getIndependentColumn()
         webcam_marker_start_time = webcam_marker_times[0]
@@ -345,13 +347,13 @@ def main():
         print(f"  - Using {len(times)} IMU frames within overlap period")
         
     else:
-        if sensor_fusion.webcam_marker_weight > 0:
+        if webcam_marker_weight > 0:
             print("Using Webcam Marker mode only (IMU orientation weight is zero)") 
             # Use the full IMU time range as the primary time grid for IMU-only mode
             startTime = times[0]  # Use full IMU range
             endTime = times[-1]   # Use full IMU range
             print(f"Using IMU-only mode: {startTime:.4f} to {endTime:.4f} seconds")
-        elif sensor_fusion.imu_orientation_weight > 0:
+        elif imu_orientation_weight > 0:
             print("Using IMU Orientation mode only (Webcam marker weight is zero)") 
             # Use the full webcam marker time range as the primary time grid for Webcam-only mode
             webcam_marker_times = sensor_fusion.webcamMarkerTable.getIndependentColumn()
@@ -410,7 +412,7 @@ def main():
     combined_errors_storage = None
     
     # Initialize marker error storage if markers are used
-    if sensor_fusion.webcam_marker_weight > 0:
+    if webcam_marker_weight > 0:
         marker_errors_storage = osim.Storage()
         marker_errors_storage.setName("Model Marker Errors from IK")
         marker_errors_storage.setInDegrees(False)  # Errors are in meters
@@ -429,7 +431,7 @@ def main():
         marker_errors_storage.setColumnLabels(marker_labels)
         
     # Initialize orientation error storage if orientations are used
-    if sensor_fusion.imu_orientation_weight > 0:
+    if imu_orientation_weight > 0:
         orientation_errors_storage = osim.Storage()
         orientation_errors_storage.setName("Model Orientation Errors from IK")
         orientation_errors_storage.setInDegrees(True)  # Convert radians to degrees
@@ -489,7 +491,7 @@ def main():
         num_markers = 0
         individual_marker_errors = []
         
-        if sensor_fusion.webcam_marker_weight > 0:
+        if webcam_marker_weight > 0:
             try:
                 marker_errors = osim.SimTKArrayDouble()
                 ikSolver.computeCurrentSquaredMarkerErrors(marker_errors)
@@ -533,7 +535,7 @@ def main():
         num_orientations = 0
         individual_orientation_errors = []
         
-        if sensor_fusion.imu_orientation_weight > 0:
+        if imu_orientation_weight > 0:
             try:
                 orientation_errors = osim.SimTKArrayDouble()
                 ikSolver.computeCurrentOrientationErrors(orientation_errors)
@@ -613,13 +615,13 @@ def main():
     
     try:
         # Save marker errors
-        if marker_errors_storage and sensor_fusion.webcam_marker_weight > 0:
+        if marker_errors_storage and webcam_marker_weight > 0:
             marker_filename = f"{trial_name}_ik_marker_errors"
             osim.Storage.printResult(marker_errors_storage, marker_filename, resultsDirectory, -1, ".mot")
             print(f"✓ Saved marker errors to: {resultsDirectory}/{marker_filename}.mot")
         
         # Save orientation errors  
-        if orientation_errors_storage and sensor_fusion.imu_orientation_weight > 0:
+        if orientation_errors_storage and imu_orientation_weight > 0:
             orientation_filename = f"{trial_name}_ik_orientation_errors"
             osim.Storage.printResult(orientation_errors_storage, orientation_filename, resultsDirectory, -1, ".mot")
             print(f"✓ Saved orientation errors to: {resultsDirectory}/{orientation_filename}.mot")
@@ -630,7 +632,7 @@ def main():
         print(f"✓ Saved combined errors to: {resultsDirectory}/{combined_filename}.mot")
         
         # Print summary statistics (following OpenSim C++ logging pattern)
-        if sensor_fusion.webcam_marker_weight > 0 and num_markers > 0:
+        if webcam_marker_weight > 0 and num_markers > 0:
             print(f"\n=== FINAL ERROR SUMMARY ===")
             print(f"Markers: {num_markers} tracked")
             print(f"Marker weights:")
@@ -640,7 +642,7 @@ def main():
             print(f"  - Final max error: {marker_max:.6f} m")
             print(f"  - Total squared error: {marker_total_squared_error:.8f}")
             
-        if sensor_fusion.imu_orientation_weight > 0 and num_orientations > 0:
+        if imu_orientation_weight > 0 and num_orientations > 0:
             print(f"Orientations: {num_orientations} tracked")  
             print(f"Orientation weights:")
             for weight in sensor_fusion.orientationWeights:
