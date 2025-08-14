@@ -25,10 +25,10 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         scaler.find('output_model_file').text = output_model_file 
         scaler = tag.find('GenericModelMaker')
         scaler.find('model_file').text = "../../" + model_path
-        scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/webcam_markers.xml"
+        scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/stereocamera_markers.xml"
 
 
-    new_file_path = 'recordings/subject'+ subject_ID +'/webcam_scaling_setup_'+ mvt_ID +'.xml'
+    new_file_path = 'recordings/subject'+ subject_ID +'/stereocamera_scaling_setup_'+ mvt_ID +'.xml'
     tree.write(new_file_path, encoding='utf-8', xml_declaration=True)
     return new_file_path
 
@@ -72,7 +72,7 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
     model = load_model(model_path)
 
     # Define paths
-    static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
+    static_trial_path = "../../recordings/subject" + subject_ID + "/stereocamera_static.trc"
     output_model_file = "../../OpenSim/Models/Rajagopal/Calibrated_Scaled_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
 
     # Create our own config file
