@@ -393,9 +393,12 @@ def main():
 
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 0, 0, 10, 10]
-    orientation_weights = [100, 100, 100, 100, 100, 100, 10, 10]
-    stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
+    #webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 0, 0, 10, 10]
+    #orientation_weights = [100, 100, 100, 100, 100, 100, 10, 10]
+    #stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
+    webcam_weights = [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1]
+    orientation_weights = [10, 10, 10, 10, 10, 10, 1, 1]
+    stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     constraint_var = 1000000000  # infinity basically
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
@@ -431,9 +434,7 @@ def main():
     # Check what the solver actually sees
     print(f"Solver configuration:")
     print(f"  - Markers reference: {sensor_fusion.mRefs.getNumFrames() if hasattr(sensor_fusion.mRefs, 'getNumFrames') else 'unknown'} frames")
-    print(f"  - Markers reference labels: {len(sensor_fusion.mRefs.getNames()) if hasattr(sensor_fusion.mRefs, 'getNames ') else 'unknown'} markers")
     print(f"  - Orientations reference: {len(sensor_fusion.oRefs.getTimes()) if hasattr(sensor_fusion.oRefs, 'getTimes') else 'unknown'} frames")
-    print(f"  - Orientations reference labels: {len(sensor_fusion.oRefs.getNames()) if hasattr(sensor_fusion.oRefs, 'getNames ') else 'unknown'} imus")
     print(f"  - Constraint variable: {sensor_fusion.constraint_var}")
     print(f"  - Accuracy: {accuracy}")
     print("="*60)
@@ -626,8 +627,8 @@ def main():
                         stereocamera_total_squared_error += stereocamera_squared_error
                         individual_marker_errors.append(math.sqrt(stereocamera_squared_error))
                         
-                        if stereocamera_squared_error > max_webcam_squared_error:
-                            max_webcam_squared_error = stereocamera_squared_error
+                        if stereocamera_squared_error > max_stereocamera_squared_error:
+                            max_stereocamera_squared_error = stereocamera_squared_error
                     
                     webcam_rms = math.sqrt(webcam_total_squared_error / num_webcam_markers) if num_webcam_markers > 0 else 0
                     webcam_max = math.sqrt(max_webcam_squared_error)
@@ -758,12 +759,16 @@ def main():
         print(f"✓ Saved combined errors to: {resultsDirectory}/{combined_filename}.mot")
         
         # Print summary statistics (following OpenSim C++ logging pattern)
-        num_markers = num_webcam_markers + num_stereocamera_markers
-        if (max_webcam_weight > 0 or max_stereocamera_squared_error > 0 ) and num_markers > 0:
+        
+        if (max_webcam_weight > 0 or max_stereocamera_weight > 0 ):
+            num_markers = num_webcam_markers + num_stereocamera_markers + 2 
             print(f"\n=== FINAL ERROR SUMMARY ===")
             print(f"Markers: {num_markers} tracked")
-            print(f"Marker weights:")
+            print(f"Webcam marker weights:")
             for weight in sensor_fusion.webcamMarkerWeights:
+                print(f"{weight.getWeight()}")
+            print(f"Stereocamera marker weights:")
+            for weight in sensor_fusion.stereocameraMarkerWeights:
                 print(f"{weight.getWeight()}")
             print(f"  - Final webcam RMS error: {webcam_rms:.6f} m")
             print(f"  - Final webcam max error: {webcam_max:.6f} m")
