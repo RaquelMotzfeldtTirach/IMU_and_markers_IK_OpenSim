@@ -73,7 +73,7 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
 
     # Define paths
     static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
-    output_model_file = "../../OpenSim/Models/Rajagopal/Calibrated_Scaled_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+    output_model_file = "../../OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
 
     # Create our own config file
     config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path)

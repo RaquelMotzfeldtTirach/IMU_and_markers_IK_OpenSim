@@ -13,13 +13,13 @@ from math import pi
 import argparse
 import os
 import time
-from OpenSense_CalibrateModel import main as calibrate_model
+from OpenSense_CalibrateModel import main as imu_calibrate_model
 from OpenSense_IMUDataConverter import main as convert_imu_data
 from modelScalingWebcam import main as model_scaling_webcam
 from modelScalingStereocamera import main as model_scaling_stereocamera
 
 class OpenSimSensorFusion:
-    def __init__(self, model_path, model_name, subject_ID, trial_ID, sensor_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
+    def __init__(self, model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, webcam_to_opensim_rotation, stereocamera_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
         self.model_path = model_path
         self.model_name = model_name
         self.model = None
@@ -34,7 +34,9 @@ class OpenSimSensorFusion:
         self.orientation_weights = None
         self.stereocamera_weights = None
         self.constraint_var = None
-        self.imu_to_opensim_rotation = sensor_to_opensim_rotation
+        self.imu_to_opensim_rotation = imu_to_opensim_rotation
+        self.webcam_to_opensim_rotation = webcam_to_opensim_rotation
+        self.stereocamera_to_opensim_rotation = stereocamera_to_opensim_rotation
         self.base_heading_axis = "-z"  
         self.resultsDirectory = None
         self.webcamMarkerTable = None
@@ -103,24 +105,29 @@ class OpenSimSensorFusion:
         
 
     def calibrate_model(self, orientation_file): 
-        ## TODO : DOES THE CALIBRATION ORDER MATTER???
-        # IMU calibration
-        calibrated_model_path = calibrate_model(self.model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID)
+        ## TODO : DOES THE CALIBRATION ORDER MATTER??? we try first webcam, then stereocamera, then IMU
+        calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
         # Webcam scaling and marker placement
-        calibrated_scaled_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
-        calibrated_scaled_model_path = calibrated_scaled_model_path.removeprefix("../../")
+        if (max(self.webcam_weights) > 0):
+            calibrated_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
+            calibrated_model_path = calibrated_model_path.removeprefix("../../")
         # Stereocamera scaling and marker placement
-        double_calibrated_scaled_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_scaled_model_path)
-        double_calibrated_scaled_model_path = double_calibrated_scaled_model_path.removeprefix("../../")
+        if (max(self.stereocamera_weights) > 0):
+            calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+            calibrated_model_path = calibrated_model_path.removeprefix("../../")
+        # IMU calibration
+        if (max(self.orientation_weights) > 0):
+            # calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID) # TODO: check if this is needed
+            calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID)
 
-        self.model = osim.Model(double_calibrated_scaled_model_path)
+        self.model = osim.Model(calibrated_model_path)
         self.s = self.model.initSystem()  
 
         nb_markers = self.model.getMarkerSet().getSize()
-        print(f"Model calibrated and scaled: {double_calibrated_scaled_model_path}")
+        print(f"Model calibrated and scaled: {calibrated_model_path}")
         print(f"Number of markers in the model: {nb_markers}")
 
-        return double_calibrated_scaled_model_path
+        return calibrated_model_path
 
     def set_weights(self, webcam_weights, orientation_weights, stereocamera_weights, constraint_var):
         self.webcam_weights = webcam_weights
@@ -156,8 +163,6 @@ class OpenSimSensorFusion:
         print(f"Webcam marker weight: {self.webcam_weights}")
         print(f"IMU orientation weight: {self.orientation_weights}")
         print(f"Stereocamera marker weight: {self.stereocamera_weights}")
-
-        ## !! WEIGHTS HAVE TO BE DIFFERENT WITHIN A SAME SET FOR THE SOLVER TO TAKE THE WEIGHTS INTO ACCOUNT !!
 
 
     def heading_correction_imu_data(self, quatTable):
@@ -255,7 +260,39 @@ class OpenSimSensorFusion:
         orientationData = osim.OpenSenseUtilities.convertQuaternionsToRotations(quatTable)
 
         self.orientationQuatTable = orientationData
+    
+    def camera_correction(self, camera_type):
+        if camera_type == "webcam":
+            # Apply rotation to webcam markers
+            rotX = osim.Rotation()
+            rotX.setRotationFromAngleAboutAxis(self.webcam_to_opensim_rotation[0], osim.CoordinateAxis(0))
+            rotY = osim.Rotation() 
+            rotY.setRotationFromAngleAboutAxis(self.webcam_to_opensim_rotation[1], osim.CoordinateAxis(1))
+            rotZ = osim.Rotation()
+            rotZ.setRotationFromAngleAboutAxis(self.webcam_to_opensim_rotation[2], osim.CoordinateAxis(2))
 
+            osim.OpenSenseUtilities.rotateMarkerTable(self.webcamMarkerTable, rotX)
+            osim.OpenSenseUtilities.rotateMarkerTable(self.webcamMarkerTable, rotY)
+            osim.OpenSenseUtilities.rotateMarkerTable(self.webcamMarkerTable, rotZ)
+
+            print(f"Applied webcam to OpenSim rotations: {self.webcam_to_opensim_rotation[0]*180/pi:.1f}, {self.webcam_to_opensim_rotation[1]*180/pi:.1f}, {self.webcam_to_opensim_rotation[2]*180/pi:.1f} degrees")
+        elif camera_type == "stereocamera":
+            # Apply rotation to stereocamera markers
+            rotX = osim.Rotation()
+            rotX.setRotationFromAngleAboutAxis(self.stereocamera_to_opensim_rotation[0], osim.CoordinateAxis(0))
+            rotY = osim.Rotation() 
+            rotY.setRotationFromAngleAboutAxis(self.stereocamera_to_opensim_rotation[1], osim.CoordinateAxis(1))
+            rotZ = osim.Rotation()
+            rotZ.setRotationFromAngleAboutAxis(self.stereocamera_to_opensim_rotation[2], osim.CoordinateAxis(2))
+
+            osim.OpenSenseUtilities.rotateMarkerTable(self.stereocameraMarkerTable, rotX)
+            osim.OpenSenseUtilities.rotateMarkerTable(self.stereocameraMarkerTable, rotY)
+            osim.OpenSenseUtilities.rotateMarkerTable(self.stereocameraMarkerTable, rotZ)
+
+            print(f"Applied stereocamera to OpenSim rotations: {self.stereocamera_to_opensim_rotation[0]*180/pi:.1f}, {self.stereocamera_to_opensim_rotation[1]*180/pi:.1f}, {self.stereocamera_to_opensim_rotation[2]*180/pi:.1f} degrees")
+        else:
+            raise ValueError(f"Invalid camera type: {camera_type}. Expected 'webcam' or 'stereocamera'.")
+        
     def downsampling(self):
         # Downsampling the orientation data to match marker timestamps test
         imu_times = self.orientationQuatTable.getIndependentColumn()
@@ -376,8 +413,10 @@ def main():
     subject_sex = input("Enter the subject sex (M/F): ")
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
-    sensor_to_opensim_rotation = Vec3(-pi/2, 52*pi/180, 0)  # The rotation of IMU data to the OpenSim world frame 0> this should be tested properly for 3 sensors beng fused! maybe even it should be a parameter to learn!!
-    sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, sensor_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
+    imu_to_opensim_rotation = Vec3(-pi/2, 39.5*pi/180, 0)  # Added +40 degrees to counter -40 degree pelvis rotation
+    webcam_to_opensim_rotation = Vec3(140*pi/180, 0, 0)  # Webcam rotation to OpenSim world frame
+    stereocamera_to_opensim_rotation = Vec3(0, 0, 0)  # Stereocamera rotation to OpenSim world frame
+    sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, webcam_to_opensim_rotation, stereocamera_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
     sensor_fusion.resultsDirectory = 'FusionIKResults'
 
     # Get IMU data
@@ -396,10 +435,10 @@ def main():
     #webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 0, 0, 10, 10]
     #orientation_weights = [100, 100, 100, 100, 100, 100, 10, 10]
     #stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
-    webcam_weights = [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1]
-    orientation_weights = [10, 10, 10, 10, 10, 10, 1, 1]
-    stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    constraint_var = 1000000000  # infinity basically
+    webcam_weights = [1 for _ in range(12)] 
+    orientation_weights = [0 for _ in range(8)]  # No IMU orientation weight
+    stereocamera_weights = [0 for _ in range(15)]  # No Stereocamera marker weight
+    constraint_var = 1000  #low for fusion
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
     max_webcam_weight = max(webcam_weights)  # Use the minimum weight for all markers
@@ -415,7 +454,7 @@ def main():
 
     # Correct IMU orientations
     sensor_fusion.heading_correction_imu_data(sensor_fusion.orientationQuatTable)
-
+   
     
     # Load the orientation and marker references
     sensor_fusion.load_references(max_orientation_weight, max_webcam_weight, max_stereocamera_weight)
