@@ -28,7 +28,7 @@ import argparse
 def main(modelFileName, modelName, orientationsFileName, subject_ID, trial_ID):
 
     # Set variables to use
-    sensor_to_opensim_rotations = osim.Vec3(-pi/2, 0, 0);# The rotation of IMU data to the OpenSim world frame # MAYBE -90 in degrees!
+    sensor_to_opensim_rotations = osim.Vec3(-pi/2, 0, 0); # The rotation of IMU data to the OpenSim world frame # MAYBE -90 in degrees!
     baseIMUName = 'pelvis_imu';                     # The base IMU is the IMU on the base body of the model that dictates the heading (forward) direction of the model.
     baseIMUHeading = '-z';                           # The Coordinate Axis of the base IMU that points in the heading direction. 
     visulizeCalibration = True;                     # Boolean to Visualize the Output model

@@ -19,7 +19,7 @@ from modelScalingWebcam import main as model_scaling_webcam
 from modelScalingStereocamera import main as model_scaling_stereocamera
 
 class OpenSimSensorFusion:
-    def __init__(self, model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, webcam_to_opensim_rotation, stereocamera_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
+    def __init__(self, model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
         self.model_path = model_path
         self.model_name = model_name
         self.model = None
@@ -35,8 +35,6 @@ class OpenSimSensorFusion:
         self.stereocamera_weights = None
         self.constraint_var = None
         self.imu_to_opensim_rotation = imu_to_opensim_rotation
-        self.webcam_to_opensim_rotation = webcam_to_opensim_rotation
-        self.stereocamera_to_opensim_rotation = stereocamera_to_opensim_rotation
         self.base_heading_axis = "-z"  
         self.resultsDirectory = None
         self.webcamMarkerTable = None
@@ -51,6 +49,8 @@ class OpenSimSensorFusion:
         self.oRefs = None
         self.mRefs = None
         self.combined_marker_table = None
+        self.combinedMarkerWeights = None
+        self.times = None  # Store the timestamps for downsampling
 
     def get_imu_data(self):
         # Convert IMU data
@@ -135,15 +135,6 @@ class OpenSimSensorFusion:
         self.stereocamera_weights = stereocamera_weights
         self.constraint_var = constraint_var # will actually be infinity
 
-        # Create marker weights using the correct OpenSim API pattern
-        # Give markers higher weight to prioritize marker data over IMU orientations
-        self.webcamMarkerWeights = osim.SetMarkerWeights()
-        for i, label in enumerate(self.webcamMarkerLabels):
-            markerWeight = osim.MarkerWeight()
-            markerWeight.setName(str(label))
-            markerWeight.setWeight(self.webcam_weights[i])
-            self.webcamMarkerWeights.cloneAndAppend(markerWeight)
-
         # Create orientation weights
         self.orientationWeights = osim.OrientationWeightSet()
         for i, label in enumerate(self.orientationLabels):
@@ -152,17 +143,26 @@ class OpenSimSensorFusion:
             orientationWeight.setWeight(self.orientation_weights[i])
             self.orientationWeights.cloneAndAppend(orientationWeight)
 
+        # Create marker weights using the correct OpenSim API pattern
+        # Give markers higher weight to prioritize marker data over IMU orientations
+        self.combinedMarkerWeights = osim.SetMarkerWeights()
+        if max(self.webcam_weights) > 0 :
+            for i, label in enumerate(self.webcamMarkerLabels):
+                markerWeight = osim.MarkerWeight()
+                markerWeight.setName(str(label))
+                markerWeight.setWeight(self.webcam_weights[i])
+                self.combinedMarkerWeights.cloneAndAppend(markerWeight)
         # Create stereocamera weights
-        self.stereocameraMarkerWeights = osim.SetMarkerWeights()
-        for i, label in enumerate(self.stereocameraMarkerLabels):
-            markerWeight = osim.MarkerWeight()
-            markerWeight.setName(str(label))
-            markerWeight.setWeight(self.stereocamera_weights[i])
-            self.stereocameraMarkerWeights.cloneAndAppend(markerWeight)
+        if max(self.stereocamera_weights) > 0:
+            for i, label in enumerate(self.stereocameraMarkerLabels):
+                markerWeight = osim.MarkerWeight()
+                markerWeight.setName(str(label))
+                markerWeight.setWeight(self.stereocamera_weights[i])
+                self.combinedMarkerWeights.cloneAndAppend(markerWeight)
 
         print(f"Webcam marker weight: {self.webcam_weights}")
-        print(f"IMU orientation weight: {self.orientation_weights}")
         print(f"Stereocamera marker weight: {self.stereocamera_weights}")
+        print(f"IMU orientation weight: {self.orientation_weights}")
 
 
     def heading_correction_imu_data(self, quatTable):
@@ -260,40 +260,9 @@ class OpenSimSensorFusion:
         orientationData = osim.OpenSenseUtilities.convertQuaternionsToRotations(quatTable)
 
         self.orientationQuatTable = orientationData
-    
-    def camera_correction(self, camera_type):
-        if camera_type == "webcam":
-            # Apply rotation to webcam markers
-            rotX = osim.Rotation()
-            rotX.setRotationFromAngleAboutAxis(self.webcam_to_opensim_rotation[0], osim.CoordinateAxis(0))
-            rotY = osim.Rotation() 
-            rotY.setRotationFromAngleAboutAxis(self.webcam_to_opensim_rotation[1], osim.CoordinateAxis(1))
-            rotZ = osim.Rotation()
-            rotZ.setRotationFromAngleAboutAxis(self.webcam_to_opensim_rotation[2], osim.CoordinateAxis(2))
 
-            osim.OpenSenseUtilities.rotateMarkerTable(self.webcamMarkerTable, rotX)
-            osim.OpenSenseUtilities.rotateMarkerTable(self.webcamMarkerTable, rotY)
-            osim.OpenSenseUtilities.rotateMarkerTable(self.webcamMarkerTable, rotZ)
-
-            print(f"Applied webcam to OpenSim rotations: {self.webcam_to_opensim_rotation[0]*180/pi:.1f}, {self.webcam_to_opensim_rotation[1]*180/pi:.1f}, {self.webcam_to_opensim_rotation[2]*180/pi:.1f} degrees")
-        elif camera_type == "stereocamera":
-            # Apply rotation to stereocamera markers
-            rotX = osim.Rotation()
-            rotX.setRotationFromAngleAboutAxis(self.stereocamera_to_opensim_rotation[0], osim.CoordinateAxis(0))
-            rotY = osim.Rotation() 
-            rotY.setRotationFromAngleAboutAxis(self.stereocamera_to_opensim_rotation[1], osim.CoordinateAxis(1))
-            rotZ = osim.Rotation()
-            rotZ.setRotationFromAngleAboutAxis(self.stereocamera_to_opensim_rotation[2], osim.CoordinateAxis(2))
-
-            osim.OpenSenseUtilities.rotateMarkerTable(self.stereocameraMarkerTable, rotX)
-            osim.OpenSenseUtilities.rotateMarkerTable(self.stereocameraMarkerTable, rotY)
-            osim.OpenSenseUtilities.rotateMarkerTable(self.stereocameraMarkerTable, rotZ)
-
-            print(f"Applied stereocamera to OpenSim rotations: {self.stereocamera_to_opensim_rotation[0]*180/pi:.1f}, {self.stereocamera_to_opensim_rotation[1]*180/pi:.1f}, {self.stereocamera_to_opensim_rotation[2]*180/pi:.1f} degrees")
-        else:
-            raise ValueError(f"Invalid camera type: {camera_type}. Expected 'webcam' or 'stereocamera'.")
-        
     def downsampling(self):
+        ### TO CHECK, MIGHT BE THE ORIGIN OF THE PROBLEM
         # Downsampling the orientation data to match marker timestamps test
         imu_times = self.orientationQuatTable.getIndependentColumn()
         webcam_times = self.webcamMarkerTable.getIndependentColumn()
@@ -306,9 +275,22 @@ class OpenSimSensorFusion:
         # Create a new table for downsampled orientations
         downsampled_orientations = osim.TimeSeriesTableQuaternion()
         downsampled_orientations.setColumnLabels(self.orientationQuatTable.getColumnLabels())
-        
+
+        # Find the shortest timestamps to downsample
+        if len(webcam_times) <= len(stereocamera_times) and max(self.webcam_weights) > 0:
+            shortest_times = webcam_times
+        elif len(stereocamera_times) <= len(webcam_times) and max(self.stereocamera_weights) > 0:
+            shortest_times = stereocamera_times
+        elif max(self.webcam_weights) > 0 and max(self.stereocamera_weights) == 0:
+            shortest_times = webcam_times
+        elif max(self.stereocamera_weights) > 0 and max(self.webcam_weights) == 0:
+            shortest_times = stereocamera_times
+        else:
+            # If both webcam and stereocamera weights are zero, use IMU times
+            shortest_times = imu_times
+
         # Iterate through shortest timestamps and find closest IMU orientation and closest Marker positions
-        if len(webcam_times) <= len(stereocamera_times):
+        if shortest_times == webcam_times:
             # Create a new table for downsampled stereocamera markers
             downsampled_stereocamera = osim.TimeSeriesTableVec3()
             downsampled_stereocamera.setColumnLabels(self.stereocameraMarkerTable.getColumnLabels())
@@ -322,7 +304,7 @@ class OpenSimSensorFusion:
                 downsampled_stereocamera.appendRow(marker_time, row_s)
             # Replace the original table with the downsampled one
             self.stereocameraMarkerTable = downsampled_stereocamera
-        else:
+        elif shortest_times == stereocamera_times:
             # Create a new table for downsampled webcam markers
             downsampled_webcam = osim.TimeSeriesTableVec3()
             downsampled_webcam.setColumnLabels(self.webcamMarkerTable.getColumnLabels())
@@ -336,11 +318,19 @@ class OpenSimSensorFusion:
                 downsampled_webcam.appendRow(marker_time, row_w)
             # Replace the original table with the downsampled one
             self.webcamMarkerTable = downsampled_webcam
+        else:
+            # If both webcam and stereocamera weights are zero, use IMU times directly
+            for marker_time in imu_times:
+                closest_time_o = min(imu_times, key=lambda t: abs(t - marker_time))
+                row_o = self.orientationQuatTable.getRowAtIndex(self.orientationQuatTable.getNearestRowIndexForTime(closest_time_o))
+                downsampled_orientations.appendRow(marker_time, row_o)
 
         # Replace quatTable with the downsampled orientations
         self.orientationQuatTable = downsampled_orientations
 
         print(f"Downsampling complete: {self.orientationQuatTable.getNumRows()} rows for orientation data, {self.stereocameraMarkerTable.getNumRows()} rows for stereocamera data, {self.webcamMarkerTable.getNumRows()} rows for webcam data")
+
+        self.times = shortest_times
 
     def load_references(self, max_orientation_weight, max_webcam_weight, max_stereocamera_weight):
         # Create OrientationsReference 
@@ -348,14 +338,36 @@ class OpenSimSensorFusion:
             # Create an empty OrientationsReference to completely disable orientation constraints
             print("Creating EMPTY OrientationsReference to disable all IMU orientation constraints")
             self.oRefs = osim.OrientationsReference()  # Empty reference - no orientation data
+            weights = osim.OrientationWeightSet()
+            self.oRefs.setOrientationWeightSet(weights)
+            print(f"Combined orientation weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
         else:
             self.oRefs = osim.OrientationsReference(self.orientationQuatTable, self.orientationWeights) 
             print(f"OrientationsReference created")
+            weights = osim.OrientationWeightSet()
+            self.oRefs.setOrientationWeightSet(weights)
+            print(f"Combined orientation weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
         # Create MarkersReference from loaded marker data (following C++ InverseKinematicsTool pattern)
         if max_webcam_weight == 0 and max_stereocamera_weight == 0:
             # Create an empty MarkersReference to completely disable marker constraints
             print("Creating EMPTY MarkersReference to disable all marker constraints")
             self.mRefs = osim.MarkersReference()  # Empty reference - no marker data
+            weights = self.mRefs.getMarkerWeightSet()
+            print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
+        elif max_webcam_weight > 0 and max_stereocamera_weight == 0:
+            # Create MarkersReference from webcam data only
+            self.combined_marker_table = self.webcamMarkerTable
+            self.mRefs = osim.MarkersReference(self.combined_marker_table, self.combinedMarkerWeights)
+            print(f"MarkersReference created from webcam markers")
+            weights = self.mRefs.getMarkerWeightSet()
+            print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
+        elif max_webcam_weight == 0 and max_stereocamera_weight > 0:
+            # Create MarkersReference from stereocamera data only
+            self.combined_marker_table = self.stereocameraMarkerTable
+            self.mRefs = osim.MarkersReference(self.combined_marker_table, self.combinedMarkerWeights)
+            print(f"MarkersReference created from stereocamera markers")
+            weights = self.mRefs.getMarkerWeightSet()
+            print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
         else: 
             # Combine webcam and stereocamera markers into a single MarkersReference
             self.combined_marker_table = osim.TimeSeriesTableVec3()
@@ -385,21 +397,12 @@ class OpenSimSensorFusion:
                 # Append to combined table using proper RowVector
                 self.combined_marker_table.appendRow(time, combined_row)
             
-            # Create combined marker weights
-            combined_marker_weights = osim.SetMarkerWeights()
-            for i, label in enumerate(self.webcamMarkerLabels):
-                markerWeight = osim.MarkerWeight()
-                markerWeight.setName(str(label))
-                markerWeight.setWeight(self.webcam_weights[i])
-                combined_marker_weights.cloneAndAppend(markerWeight)
-            for i, label in enumerate(self.stereocameraMarkerLabels):
-                markerWeight = osim.MarkerWeight()
-                markerWeight.setName(str(label))
-                markerWeight.setWeight(self.stereocamera_weights[i])
-                combined_marker_weights.cloneAndAppend(markerWeight)
             # Create the combined MarkersReference
-            self.mRefs = osim.MarkersReference(self.combined_marker_table, combined_marker_weights)
+            self.mRefs = osim.MarkersReference(self.combined_marker_table, self.combinedMarkerWeights)
             print(f"MarkersReference created by combining webcam and stereocamera markers")
+            weights = self.mRefs.getMarkerWeightSet()
+            print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
+
 
 def main():
     # Put log to level debug and show in terminal
@@ -414,9 +417,7 @@ def main():
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
     imu_to_opensim_rotation = Vec3(-pi/2, 39.5*pi/180, 0)  # Added +40 degrees to counter -40 degree pelvis rotation
-    webcam_to_opensim_rotation = Vec3(140*pi/180, 0, 0)  # Webcam rotation to OpenSim world frame
-    stereocamera_to_opensim_rotation = Vec3(0, 0, 0)  # Stereocamera rotation to OpenSim world frame
-    sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, webcam_to_opensim_rotation, stereocamera_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
+    sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
     sensor_fusion.resultsDirectory = 'FusionIKResults'
 
     # Get IMU data
@@ -435,11 +436,16 @@ def main():
     #webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 0, 0, 10, 10]
     #orientation_weights = [100, 100, 100, 100, 100, 100, 10, 10]
     #stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
-    webcam_weights = [1 for _ in range(12)] 
+    webcam_weights = [0 for _ in range(12)] 
     orientation_weights = [0 for _ in range(8)]  # No IMU orientation weight
-    stereocamera_weights = [0 for _ in range(15)]  # No Stereocamera marker weight
-    constraint_var = 1000  #low for fusion
+    stereocamera_weights = [1 for _ in range(15)]  # No Stereocamera marker weight
+    constraint_var = 1000000  #low for fusion
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
+    #Notes: 
+    # - webcam weights at 1, 0 for the others, constraint_var infinity => similar results to webcam-only IK
+    # - orientation weights at 1, 0 for the others, constraint_var infinity => why are there markers on the calibrated model??, but worked! 
+    # - stereocamera weights at 1, 0 for the others, constraint_var infinity => similar results to stereocamera-only IK
+    # LOOK INTO CALIBRATION ORDER AND MARKERS, DOWNSAMPLING PROBLEM AND HOW TO SET THE SAME REFERENCE FRAME
 
     max_webcam_weight = max(webcam_weights)  # Use the minimum weight for all markers
     max_orientation_weight = max(orientation_weights)  # Use the minimum weight for all orientations
@@ -451,6 +457,7 @@ def main():
 
     # Time synchronization and resampling
     sensor_fusion.downsampling()
+
 
     # Correct IMU orientations
     sensor_fusion.heading_correction_imu_data(sensor_fusion.orientationQuatTable)
@@ -485,25 +492,9 @@ def main():
 
     # Define the overlapping time range for combined mode
     # Get the actual time range - use overlapping time range for combined mode
-    times = sensor_fusion.orientationQuatTable.getIndependentColumn() 
-    
-    if (max_webcam_weight > 0 or max_orientation_weight > 0) and max_orientation_weight > 0:
-        # since we downsampled the orientation data to match webcam markers, we can use the webcam marker time range
-        webcam_marker_times = sensor_fusion.webcamMarkerTable.getIndependentColumn()
-        startTime = webcam_marker_times[0]  # Use full webcam marker range
-        endTime = webcam_marker_times[-1]   # Use full webcam marker range  
-    else:
-        if (max_webcam_weight > 0 or max_orientation_weight > 0):
-            print("Using Markers mode only (IMU orientation weight is zero)") 
-            # Use the full IMU time range as the primary time grid for IMU-only mode
-            startTime = times[0]  # Use full IMU range
-            endTime = times[-1]   # Use full IMU range
-        elif max_orientation_weight > 0:
-            print("Using IMU Orientation mode only (Webcam and Stereocamera marker weight is zero)") 
-            # Use the full webcam marker time range as the primary time grid for Webcam-only mode
-            webcam_marker_times = sensor_fusion.webcamMarkerTable.getIndependentColumn()
-            startTime = webcam_marker_times[0]  # Use full webcam marker range
-            endTime = webcam_marker_times[-1]   # Use full webcam marker range
+    times = sensor_fusion.times
+    startTime = times[0]  
+    endTime = times[-1]
 
     numTimeSteps = len(times) 
     print(f"Data time range: {startTime} to {endTime} seconds") 
@@ -803,12 +794,6 @@ def main():
             num_markers = num_webcam_markers + num_stereocamera_markers + 2 
             print(f"\n=== FINAL ERROR SUMMARY ===")
             print(f"Markers: {num_markers} tracked")
-            print(f"Webcam marker weights:")
-            for weight in sensor_fusion.webcamMarkerWeights:
-                print(f"{weight.getWeight()}")
-            print(f"Stereocamera marker weights:")
-            for weight in sensor_fusion.stereocameraMarkerWeights:
-                print(f"{weight.getWeight()}")
             print(f"  - Final webcam RMS error: {webcam_rms:.6f} m")
             print(f"  - Final webcam max error: {webcam_max:.6f} m")
             print(f"  - Total webcam squared error: {webcam_total_squared_error:.8f}")
