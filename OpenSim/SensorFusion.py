@@ -12,6 +12,7 @@ import math
 from math import pi
 import argparse
 import os
+import shutil
 import time
 from OpenSense_CalibrateModel import main as imu_calibrate_model
 from OpenSense_IMUDataConverter import main as convert_imu_data
@@ -50,22 +51,27 @@ class OpenSimSensorFusion:
         self.mRefs = None
         self.combined_marker_table = None
         self.combinedMarkerWeights = None
-        self.times = None  # Store the timestamps for downsampling
+        self.times = None 
+        self.orientation_file = None  
 
     def get_imu_data(self):
         # Convert IMU data
-        orientation_file = convert_imu_data(self.subject_ID, self.trial_ID)
-        print(f"IMU data converted and saved to: {orientation_file}")
+        self.orientation_file = convert_imu_data(self.subject_ID, self.trial_ID)
+        print(f"IMU data converted and saved to: {self.orientation_file}")
 
         # Get the orientation labels from the converted file
-        orientationTable = osim.TimeSeriesTableQuaternion(orientation_file)
-        self.orientationLabels = orientationTable.getColumnLabels()
-        return orientation_file
+        self.orientationQuatTable = osim.TimeSeriesTableQuaternion(self.orientation_file)
+        self.orientationLabels = self.orientationQuatTable.getColumnLabels()
+        
+        imuPlacer = osim.IMUPlacer() 
 
         
-    def get_webcam_data(self):
+    def get_webcam_data(self, webcam_path = None):
         # Set up the markers file
-        self.webcamMarkersFileName = "recordings/subject" + str(self.subject_ID) + "/webcam_" + str(self.trial_ID) + ".trc"
+        if webcam_path is not None:
+            self.webcamMarkersFileName = webcam_path
+        else:
+            self.webcamMarkersFileName = "recordings/subject" + str(self.subject_ID) + "/webcam_" + str(self.trial_ID) + ".trc"
 
         # Load marker data 
         self.webcamMarkerTable = osim.TimeSeriesTableVec3(self.webcamMarkersFileName)
@@ -82,10 +88,29 @@ class OpenSimSensorFusion:
         # Get marker names
         self.webcamMarkerLabels = self.webcamMarkerTable.getColumnLabels()
         print(f"Available markers: {[str(label) for label in self.webcamMarkerLabels]}")
+        
+        # Validate marker data for missing/invalid positions
+        print("Validating webcam marker data...")
+        extreme_count = 0
+        for i in range(self.webcamMarkerTable.getNumRows()):
+            row = self.webcamMarkerTable.getRowAtIndex(i)
+            for j in range(row.size()):
+                marker_pos = row.getElt(0, j)
+                # Check for extremely large values
+                if (abs(marker_pos.get(0)) > 10.0 or abs(marker_pos.get(1)) > 10.0 or abs(marker_pos.get(2)) > 10.0):
+                    extreme_count += 1
+        
+        if extreme_count > 0:
+            print(f"WARNING: Found {extreme_count} extreme marker positions in webcam data (>10m from origin)")
+        else:
+            print("✓ All webcam marker positions appear reasonable")
 
-    def get_stereocamera_data(self):
+    def get_stereocamera_data(self, stereocamera_path = None):
         # Set up the markers file
-        self.stereocameraMarkersFileName = "recordings/subject" + str(self.subject_ID) + "/stereocamera_" + str(self.trial_ID) + ".trc"
+        if stereocamera_path is not None:
+            self.stereocameraMarkersFileName = stereocamera_path
+        else:
+            self.stereocameraMarkersFileName = "recordings/subject" + str(self.subject_ID) + "/stereocamera_" + str(self.trial_ID) + ".trc"
 
         # Load marker data 
         self.stereocameraMarkerTable = osim.TimeSeriesTableVec3(self.stereocameraMarkersFileName)
@@ -103,14 +128,37 @@ class OpenSimSensorFusion:
         self.stereocameraMarkerLabels = self.stereocameraMarkerTable.getColumnLabels()
         print(f"Available stereocamera markers: {[str(label) for label in self.stereocameraMarkerLabels]}")
         
+        # Validate marker data for missing/invalid positions
+        print("Validating stereocamera marker data...")
+        nan_count = 0
+        extreme_count = 0
+        for i in range(self.stereocameraMarkerTable.getNumRows()):
+            row = self.stereocameraMarkerTable.getRowAtIndex(i)
+            for j in range(row.size()):
+                marker_pos = row.getElt(0, j)
+                # Check for NaN or extremely large values
+                if (abs(marker_pos.get(0)) > 10.0 or abs(marker_pos.get(1)) > 10.0 or abs(marker_pos.get(2)) > 10.0):
+                    extreme_count += 1
+                    if extreme_count < 5:  # Only print first few
+                        print(f"  Extreme marker position at row {i}, marker {j}: ({marker_pos.get(0):.3f}, {marker_pos.get(1):.3f}, {marker_pos.get(2):.3f})")
+        
+        if extreme_count > 0:
+            print(f"WARNING: Found {extreme_count} extreme marker positions in stereocamera data (>10m from origin)")
+            print("This could cause the billion-scale errors you're seeing!")
+        else:
+            print("✓ All stereocamera marker positions appear reasonable")
+        
 
-    def calibrate_model(self, orientation_file): 
+    def calibrate_model(self): 
         ## TODO : DOES THE CALIBRATION ORDER MATTER??? we try first webcam, then stereocamera, then IMU
         calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
         # Webcam scaling and marker placement
         if (max(self.webcam_weights) > 0):
             calibrated_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
             calibrated_model_path = calibrated_model_path.removeprefix("../../")
+        else:
+            # If no webcam markers are used, copy the original model
+            calibrated_model_path = self.model_path
         # Stereocamera scaling and marker placement
         if (max(self.stereocamera_weights) > 0):
             calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
@@ -118,7 +166,8 @@ class OpenSimSensorFusion:
         # IMU calibration
         if (max(self.orientation_weights) > 0):
             # calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID) # TODO: check if this is needed
-            calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID)
+            calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID)
+        
 
         self.model = osim.Model(calibrated_model_path)
         self.s = self.model.initSystem()  
@@ -163,6 +212,172 @@ class OpenSimSensorFusion:
         print(f"Webcam marker weight: {self.webcam_weights}")
         print(f"Stereocamera marker weight: {self.stereocamera_weights}")
         print(f"IMU orientation weight: {self.orientation_weights}")
+
+    def manual_downsampling(self):
+        # Downsampling the orientation data to match marker timestamps test
+        imu_times = self.orientationQuatTable.getIndependentColumn()
+        webcam_times = self.webcamMarkerTable.getIndependentColumn()
+        stereocamera_times = self.stereocameraMarkerTable.getIndependentColumn()
+
+        print(f"IMU times: {len(imu_times)} samples")
+        print(f"Webcam times: {len(webcam_times)} samples")
+        print(f"Stereocamera times: {len(stereocamera_times)} samples")
+
+        # Find the shortest timestamps to downsample
+        times = []
+        # first exclude data with zero weights
+        if max(self.webcam_weights) != 0 and len(webcam_times) > 0:
+            times.append(webcam_times)
+            print("Including webcam times for downsampling")
+        if max(self.stereocamera_weights) != 0 and len(stereocamera_times) > 0:
+            times.append(stereocamera_times)
+            print("Including stereocamera times for downsampling")
+        if max(self.orientation_weights) != 0 and len(imu_times) > 0:
+            times.append(imu_times)
+            print("Including IMU times for downsampling")
+        
+        # then find the shortest timestamps
+        shortest_times = []
+        if len(times) > 0:
+            shortest_times = min(times, key=len)
+            print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
+        else:
+            print("No data available for downsampling, skipping...")
+            return
+        
+        # Create new downsampled files
+        # IMU data
+        if max(self.orientation_weights) != 0 and shortest_times != imu_times:
+            new_imu_path = self.orientation_file.replace('.sto', '_downsampled_'+ str(len(shortest_times)) +'.sto')  
+            # delete all data except for the header
+            with open(self.orientation_file, 'r') as f:
+                lines = f.readlines()
+            with open(new_imu_path, 'w') as f:
+                f.writelines(lines[:5])  
+        if max(self.webcam_weights) != 0 and shortest_times != webcam_times:
+            new_webcam_path = self.webcamMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
+            # delete all data except for the header
+            with open(self.webcamMarkersFileName, 'r') as f:
+                lines = f.readlines()
+            with open(new_webcam_path, 'w') as f:
+                f.writelines(lines[:6])  
+        if max(self.stereocamera_weights) != 0 and shortest_times != stereocamera_times:
+            new_stereocamera_path = self.stereocameraMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
+            # delete all data except for the header
+            with open(self.stereocameraMarkersFileName, 'r') as f:
+                lines = f.readlines()
+            with open(new_stereocamera_path, 'w') as f:
+                f.writelines(lines[:6])  
+
+        # Iterate through shortest timestamps and find closest IMU orientation and closest Marker positions
+        for time in shortest_times:
+            # Find the closest IMU orientation if IMU weights are used
+            if max(self.orientation_weights) != 0 and shortest_times != imu_times:
+                # Read old file
+                with open(self.orientation_file, 'r') as f:
+                    lines = f.readlines()
+                # Find the closest IMU orientation for that time, knowing that the file is sorted by time
+                closest_orientation = None
+                closest_diff = float('inf')
+                for line in lines[5:]:  # Skip header
+                    parts = line.strip().split('\t')
+                    if len(parts) > 1:
+                        try:
+                            timestamp = float(parts[0])
+                            if timestamp == time:
+                                closest_orientation = line
+                                break
+                            diff = abs(timestamp - time)
+                            # if the difference is growing, we can stop searching
+                            if diff > closest_diff:
+                                break
+                            if diff < closest_diff:
+                                closest_diff = diff
+                                closest_orientation = line
+                        except ValueError:
+                            continue
+                if closest_orientation:
+                    # change the timestamp to the current time
+                    closest_orientation = closest_orientation.replace(closest_orientation.split('\t')[0], f"{time:.6f}")
+                    with open(new_imu_path, 'a') as f:
+                        f.write(closest_orientation)
+
+            # Find the closest webcam marker positions if webcam weights are used
+            if max(self.webcam_weights) != 0 and shortest_times != webcam_times:
+                # Read old file
+                with open(self.webcamMarkersFileName, 'r') as f:
+                    lines = f.readlines()
+                # Find the closest webcam marker positions for that time, knowing that the file is sorted by time
+                closest_markers = None
+                closest_diff = float('inf')
+                for line in lines[6:]:  # Skip header
+                    parts = line.strip().split('\t')
+                    if len(parts) > 1:
+                        try:
+                            timestamp = float(parts[1])
+                            if timestamp == time:
+                                closest_markers = line
+                                break
+                            diff = abs(timestamp - time)
+                            # if the difference is growing, we can stop searching
+                            if diff > closest_diff:
+                                break
+                            if diff < closest_diff:
+                                closest_diff = diff
+                                closest_markers = line
+                        except ValueError:
+                            continue
+                if closest_markers:
+                    # change the timestamp to the current time
+                    closest_markers = closest_markers.replace(closest_markers.split('\t')[1], f"{time:.6f}")
+                    with open(new_webcam_path, 'a') as f:
+                        f.write(closest_markers)
+                # Find the closest stereocamera marker positions if stereocamera weights are used
+            if max(self.stereocamera_weights) != 0 and shortest_times != stereocamera_times:
+                # Read old file
+                with open(self.stereocameraMarkersFileName, 'r') as f:
+                    lines = f.readlines()
+                # Find the closest stereocamera marker positions for that time, knowing that the file is sorted by time
+                closest_markers = None
+                closest_diff = float('inf')
+                for line in lines[6:]:  # Skip header
+                    parts = line.strip().split('\t')
+                    if len(parts) > 1:
+                        try:
+                            timestamp = float(parts[1])
+                            if timestamp == time:
+                                closest_markers = line
+                                break
+                            diff = abs(timestamp - time)
+                            # if the difference is growing, we can stop searching
+                            if diff > closest_diff:
+                                break
+                            if diff < closest_diff:
+                                closest_diff = diff
+                                closest_markers = line
+                        except ValueError:
+                            continue
+                if closest_markers:
+                    # change the timestamp to the current time
+                    closest_markers = closest_markers.replace(closest_markers.split('\t')[1], f"{time:.6f}")
+                    with open(new_stereocamera_path, 'a') as f:
+                        f.write(closest_markers)
+
+
+        # Replace tables with the downsampled tables by reloading them
+        if max(self.orientation_weights) != 0 and shortest_times != imu_times:
+            self.orientation_file = new_imu_path
+            self.orientationQuatTable = osim.TimeSeriesTableQuaternion(self.orientation_file)
+        if max(self.webcam_weights) != 0 and shortest_times != webcam_times:
+            self.webcamMarkersFileName = new_webcam_path
+            self.get_webcam_data(self.webcamMarkersFileName)
+        if max(self.stereocamera_weights) != 0 and shortest_times != stereocamera_times:
+            self.stereocameraMarkersFileName = new_stereocamera_path
+            self.get_stereocamera_data(self.stereocameraMarkersFileName)
+
+        print(f"Downsampling complete: {self.orientationQuatTable.getNumRows()} rows for orientation data, {self.stereocameraMarkerTable.getNumRows()} rows for stereocamera data, {self.webcamMarkerTable.getNumRows()} rows for webcam data")
+
+        self.times = shortest_times
 
 
     def heading_correction_imu_data(self, quatTable):
@@ -258,11 +473,9 @@ class OpenSimSensorFusion:
         #         f"Y={heading_rotation_vec3.get(1)*180/pi:.1f}°, "
         #         f"Z={heading_rotation_vec3.get(2)*180/pi:.1f}°")
         orientationData = osim.OpenSenseUtilities.convertQuaternionsToRotations(quatTable)
-
         self.orientationQuatTable = orientationData
 
-    def downsampling(self):
-        ### TO CHECK, MIGHT BE THE ORIGIN OF THE PROBLEM
+    def opensim_downsampling(self):
         # Downsampling the orientation data to match marker timestamps test
         imu_times = self.orientationQuatTable.getIndependentColumn()
         webcam_times = self.webcamMarkerTable.getIndependentColumn()
@@ -272,61 +485,82 @@ class OpenSimSensorFusion:
         print(f"Webcam times: {len(webcam_times)} samples")
         print(f"Stereocamera times: {len(stereocamera_times)} samples")
 
-        # Create a new table for downsampled orientations
-        downsampled_orientations = osim.TimeSeriesTableQuaternion()
+        # Create a new table for downsampled orientations, webcam and stereocamera markers
+        downsampled_orientations = osim.TimeSeriesTableRotation()  
         downsampled_orientations.setColumnLabels(self.orientationQuatTable.getColumnLabels())
+        downsampled_webcam = osim.TimeSeriesTableVec3()
+        downsampled_webcam.setColumnLabels(self.webcamMarkerTable.getColumnLabels())
+        downsampled_stereocamera = osim.TimeSeriesTableVec3()
+        downsampled_stereocamera.setColumnLabels(self.stereocameraMarkerTable.getColumnLabels())
 
         # Find the shortest timestamps to downsample
-        if len(webcam_times) <= len(stereocamera_times) and max(self.webcam_weights) > 0:
-            shortest_times = webcam_times
-        elif len(stereocamera_times) <= len(webcam_times) and max(self.stereocamera_weights) > 0:
-            shortest_times = stereocamera_times
-        elif max(self.webcam_weights) > 0 and max(self.stereocamera_weights) == 0:
-            shortest_times = webcam_times
-        elif max(self.stereocamera_weights) > 0 and max(self.webcam_weights) == 0:
-            shortest_times = stereocamera_times
+        times = []
+        # first exclude data with zero weights
+        if max(self.webcam_weights) != 0 and len(webcam_times) > 0:
+            times.append(webcam_times)
+            print("Including webcam times for downsampling")
+        if max(self.stereocamera_weights) != 0 and len(stereocamera_times) > 0:
+            times.append(stereocamera_times)
+            print("Including stereocamera times for downsampling")
+        if max(self.orientation_weights) != 0 and len(imu_times) > 0:
+            times.append(imu_times)
+            print("Including IMU times for downsampling")
+        
+        # then find the shortest timestamps
+        shortest_times = []
+        if len(times) > 0:
+            shortest_times = min(times, key=len)
+            print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
         else:
-            # If both webcam and stereocamera weights are zero, use IMU times
-            shortest_times = imu_times
+            print("No data available for downsampling, skipping...")
+            return
+        # test: define shortest time as webcam times
+        shortest_times = webcam_times
 
         # Iterate through shortest timestamps and find closest IMU orientation and closest Marker positions
-        if shortest_times == webcam_times:
-            # Create a new table for downsampled stereocamera markers
-            downsampled_stereocamera = osim.TimeSeriesTableVec3()
-            downsampled_stereocamera.setColumnLabels(self.stereocameraMarkerTable.getColumnLabels())
+        for time in shortest_times:
+            # Find the closest IMU orientation if IMU weights are used
+            if max(self.orientation_weights) != 0:
+                try:
+                    imu_index = self.orientationQuatTable.getNearestRowIndexForTime(time)
+                    if imu_index >= 0:
+                        imu_row = self.orientationQuatTable.getRowAtIndex(imu_index)
+                        downsampled_orientations.appendRow(time, imu_row)
+                except Exception as e:
+                    print(f"Warning: Failed to add IMU data at time {time}: {e}")
 
-            for marker_time in webcam_times:
-                closest_time_o = min(imu_times, key=lambda t: abs(t - marker_time))
-                row_o = self.orientationQuatTable.getRowAtIndex(self.orientationQuatTable.getNearestRowIndexForTime(closest_time_o))
-                downsampled_orientations.appendRow(marker_time, row_o)
-                closest_time_s = min(stereocamera_times, key=lambda t: abs(t - marker_time))
-                row_s = self.stereocameraMarkerTable.getRowAtIndex(self.stereocameraMarkerTable.getNearestRowIndexForTime(closest_time_s))
-                downsampled_stereocamera.appendRow(marker_time, row_s)
-            # Replace the original table with the downsampled one
-            self.stereocameraMarkerTable = downsampled_stereocamera
-        elif shortest_times == stereocamera_times:
-            # Create a new table for downsampled webcam markers
-            downsampled_webcam = osim.TimeSeriesTableVec3()
-            downsampled_webcam.setColumnLabels(self.webcamMarkerTable.getColumnLabels())
+            # Find the closest webcam marker positions if webcam weights are used
+            if max(self.webcam_weights) != 0:
+                try:
+                    webcam_index = self.webcamMarkerTable.getNearestRowIndexForTime(time)
+                    if webcam_index >= 0:
+                        webcam_row = self.webcamMarkerTable.getRowAtIndex(webcam_index)
+                        downsampled_webcam.appendRow(time, webcam_row)
+                except Exception as e:
+                    print(f"Warning: Failed to add webcam data at time {time}: {e}")
 
-            for marker_time in stereocamera_times:
-                closest_time_o = min(imu_times, key=lambda t: abs(t - marker_time))
-                row_o = self.orientationQuatTable.getRowAtIndex(self.orientationQuatTable.getNearestRowIndexForTime(closest_time_o))
-                downsampled_orientations.appendRow(marker_time, row_o)
-                closest_time_w = min(webcam_times, key=lambda t: abs(t - marker_time))
-                row_w = self.webcamMarkerTable.getRowAtIndex(self.webcamMarkerTable.getNearestRowIndexForTime(closest_time_w))
-                downsampled_webcam.appendRow(marker_time, row_w)
-            # Replace the original table with the downsampled one
-            self.webcamMarkerTable = downsampled_webcam
-        else:
-            # If both webcam and stereocamera weights are zero, use IMU times directly
-            for marker_time in imu_times:
-                closest_time_o = min(imu_times, key=lambda t: abs(t - marker_time))
-                row_o = self.orientationQuatTable.getRowAtIndex(self.orientationQuatTable.getNearestRowIndexForTime(closest_time_o))
-                downsampled_orientations.appendRow(marker_time, row_o)
+            # Find the closest stereocamera marker positions if stereocamera weights are used
+            if max(self.stereocamera_weights) != 0:
+                try:
+                    stereo_index = self.stereocameraMarkerTable.getNearestRowIndexForTime(time)
+                    if stereo_index >= 0:
+                        stereo_row = self.stereocameraMarkerTable.getRowAtIndex(stereo_index)
+                        downsampled_stereocamera.appendRow(time, stereo_row)
+                except Exception as e:
+                    print(f"Warning: Failed to add stereocamera data at time {time}: {e}")
+            
 
-        # Replace quatTable with the downsampled orientations
+        # Replace tables with the downsampled tables
         self.orientationQuatTable = downsampled_orientations
+        self.stereocameraMarkerTable = downsampled_stereocamera
+        #self.webcamMarkerTable = downsampled_webcam
+        # test if webcamMarkerTable and downsampled_webcam are the same
+        # for i in range(self.webcamMarkerTable.getNumRows()):
+        #     if self.webcamMarkerTable.getRowAtIndex(i) != downsampled_webcam.getRowAtIndex(i):
+        #         for j in range(self.webcamMarkerTable.getNumColumns()):
+        #             if self.webcamMarkerTable.getRowAtIndex(i)[j] != downsampled_webcam.getRowAtIndex(i)[j]:
+        #                 print(f"Webcam marker data mismatch at row {i}, column {j}: {self.webcamMarkerTable.getRowAtIndex(i)[j]} != {downsampled_webcam.getRowAtIndex(i)[j]}")
+        #self.webcamMarkerTable = downsampled_webcam
 
         print(f"Downsampling complete: {self.orientationQuatTable.getNumRows()} rows for orientation data, {self.stereocameraMarkerTable.getNumRows()} rows for stereocamera data, {self.webcamMarkerTable.getNumRows()} rows for webcam data")
 
@@ -340,13 +574,12 @@ class OpenSimSensorFusion:
             self.oRefs = osim.OrientationsReference()  # Empty reference - no orientation data
             weights = osim.OrientationWeightSet()
             self.oRefs.setOrientationWeightSet(weights)
-            print(f"Combined orientation weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
+            print(f"Orientation weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
         else:
-            self.oRefs = osim.OrientationsReference(self.orientationQuatTable, self.orientationWeights) 
+            self.oRefs = osim.OrientationsReference(self.orientationQuatTable, self.orientationWeights) # it's called QuatTable but it is actually Rotations 
             print(f"OrientationsReference created")
-            weights = osim.OrientationWeightSet()
-            self.oRefs.setOrientationWeightSet(weights)
-            print(f"Combined orientation weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
+            self.oRefs.setOrientationWeightSet(self.orientationWeights)
+            print(f"Orientation weights: {[self.orientationWeights.get(i).getWeight() for i in range(self.orientationWeights.getSize())]}")
         # Create MarkersReference from loaded marker data (following C++ InverseKinematicsTool pattern)
         if max_webcam_weight == 0 and max_stereocamera_weight == 0:
             # Create an empty MarkersReference to completely disable marker constraints
@@ -421,9 +654,7 @@ def main():
     sensor_fusion.resultsDirectory = 'FusionIKResults'
 
     # Get IMU data
-    orientationsFileName = sensor_fusion.get_imu_data()
-    imuPlacer = osim.IMUPlacer() 
-    sensor_fusion.orientationQuatTable = osim.TimeSeriesTableQuaternion(orientationsFileName) 
+    sensor_fusion.get_imu_data()
 
     # Get webcam marker data
     sensor_fusion.get_webcam_data()
@@ -436,33 +667,27 @@ def main():
     #webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 0, 0, 10, 10]
     #orientation_weights = [100, 100, 100, 100, 100, 100, 10, 10]
     #stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
-    webcam_weights = [0 for _ in range(12)] 
-    orientation_weights = [0 for _ in range(8)]  # No IMU orientation weight
-    stereocamera_weights = [1 for _ in range(15)]  # No Stereocamera marker weight
-    constraint_var = 1000000  #low for fusion
+    webcam_weights = [1 for _ in range(12)] 
+    orientation_weights = [1 for _ in range(8)] 
+    stereocamera_weights = [0 for _ in range(15)] 
+    constraint_var = 10  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
-    #Notes: 
-    # - webcam weights at 1, 0 for the others, constraint_var infinity => similar results to webcam-only IK
-    # - orientation weights at 1, 0 for the others, constraint_var infinity => why are there markers on the calibrated model??, but worked! 
-    # - stereocamera weights at 1, 0 for the others, constraint_var infinity => similar results to stereocamera-only IK
-    # LOOK INTO CALIBRATION ORDER AND MARKERS, DOWNSAMPLING PROBLEM AND HOW TO SET THE SAME REFERENCE FRAME
 
     max_webcam_weight = max(webcam_weights)  # Use the minimum weight for all markers
     max_orientation_weight = max(orientation_weights)  # Use the minimum weight for all orientations
     max_stereocamera_weight = max(stereocamera_weights)  # Use the minimum weight for all stereocamera markers
 
+    # Manual file downsampling and then reloading tables
+    sensor_fusion.manual_downsampling()
+
     # Calibrate the model
-    calibrated_model_path = sensor_fusion.calibrate_model(orientationsFileName)
+    calibrated_model_path = sensor_fusion.calibrate_model()
     print(f"Calibrated model saved to: {calibrated_model_path}")
-
-    # Time synchronization and resampling
-    sensor_fusion.downsampling()
-
 
     # Correct IMU orientations
     sensor_fusion.heading_correction_imu_data(sensor_fusion.orientationQuatTable)
+
    
-    
     # Load the orientation and marker references
     sensor_fusion.load_references(max_orientation_weight, max_webcam_weight, max_stereocamera_weight)
     
@@ -502,7 +727,7 @@ def main():
 
 
     # For saving the results
-    directory = orientationsFileName.rpartition('/')[0] 
+    directory = sensor_fusion.orientation_file.rpartition('/')[0] 
     resultsDirectory = directory + '/' + sensor_fusion.resultsDirectory 
     # Create results directory if it doesn't exist
     os.makedirs(resultsDirectory, exist_ok=True) 
@@ -638,31 +863,56 @@ def main():
                 ikSolver.computeCurrentSquaredMarkerErrors(marker_errors)
                 
                 if marker_errors.size() > 0:
-                    num_webcam_markers = len(sensor_fusion.webcam_weights) - 1
-                    num_stereocamera_markers = len(sensor_fusion.stereocamera_weights) - 1 
+                    num_webcam_markers = len(sensor_fusion.webcam_weights)
+                    num_stereocamera_markers = len(sensor_fusion.stereocamera_weights) 
                     max_webcam_squared_error = 0.0
                     max_stereocamera_squared_error = 0.0
                     
+                    # Debug: Print marker error array info
+                    print(f"Debug: marker_errors.size()={marker_errors.size()}, num_webcam_markers={num_webcam_markers}, num_stereocamera_markers={num_stereocamera_markers}")
+                    
+                    # Validate that we have enough error values for all markers
+                    expected_markers = num_webcam_markers + num_stereocamera_markers
+                    if marker_errors.size() < expected_markers:
+                        print(f"WARNING: Not enough marker errors! Expected {expected_markers}, got {marker_errors.size()}")
+                        # Adjust counts to prevent index out of bounds
+                        available_for_stereo = max(0, marker_errors.size() - num_webcam_markers)
+                        num_stereocamera_markers = min(num_stereocamera_markers, available_for_stereo)
+                    
                     # Calculate statistics following OpenSim C++ implementation
-                    for j in range(num_webcam_markers):
+                    for j in range(min(num_webcam_markers, marker_errors.size())):
                         webcam_squared_error = marker_errors.getElt(j)
+                        # Check for invalid/extreme values
+                        if webcam_squared_error < 0 or webcam_squared_error > 1e6:  # 1 million square meters is extreme
+                            print(f"WARNING: Extreme webcam marker error at index {j}: {webcam_squared_error}")
+                            webcam_squared_error = min(webcam_squared_error, 1e6)  # Cap at reasonable value
+                        
                         webcam_total_squared_error += webcam_squared_error
                         individual_marker_errors.append(math.sqrt(webcam_squared_error))
                         
                         if webcam_squared_error > max_webcam_squared_error:
                             max_webcam_squared_error = webcam_squared_error
 
-                    for j in range(num_webcam_markers, num_webcam_markers + num_stereocamera_markers):
+                    for j in range(num_webcam_markers, min(num_webcam_markers + num_stereocamera_markers, marker_errors.size())):
                         stereocamera_squared_error = marker_errors.getElt(j)
+                        # Check for invalid/extreme values  
+                        if stereocamera_squared_error < 0 or stereocamera_squared_error > 1e6:  # 1 million square meters is extreme
+                            print(f"WARNING: Extreme stereocamera marker error at index {j}: {stereocamera_squared_error}")
+                            stereocamera_squared_error = min(stereocamera_squared_error, 1e6)  # Cap at reasonable value
+                            
                         stereocamera_total_squared_error += stereocamera_squared_error
                         individual_marker_errors.append(math.sqrt(stereocamera_squared_error))
                         
                         if stereocamera_squared_error > max_stereocamera_squared_error:
                             max_stereocamera_squared_error = stereocamera_squared_error
                     
-                    webcam_rms = math.sqrt(webcam_total_squared_error / num_webcam_markers) if num_webcam_markers > 0 else 0
+                    # Calculate actual number of markers processed for RMS calculation
+                    actual_webcam_markers = min(num_webcam_markers, marker_errors.size())
+                    actual_stereocamera_markers = min(num_stereocamera_markers, max(0, marker_errors.size() - num_webcam_markers))
+                    
+                    webcam_rms = math.sqrt(webcam_total_squared_error / actual_webcam_markers) if actual_webcam_markers > 0 else 0
                     webcam_max = math.sqrt(max_webcam_squared_error)
-                    stereocamera_rms = math.sqrt(stereocamera_total_squared_error / num_stereocamera_markers) if num_stereocamera_markers > 0 else 0
+                    stereocamera_rms = math.sqrt(stereocamera_total_squared_error / actual_stereocamera_markers) if actual_stereocamera_markers > 0 else 0
                     stereocamera_max = math.sqrt(max_stereocamera_squared_error)
                     
                     # Save marker error data
@@ -791,9 +1041,10 @@ def main():
         # Print summary statistics (following OpenSim C++ logging pattern)
         
         if (max_webcam_weight > 0 or max_stereocamera_weight > 0 ):
-            num_markers = num_webcam_markers + num_stereocamera_markers + 2 
+            # Use the counts from the sensor fusion object, not the potentially undefined local variables
+            total_markers = len(sensor_fusion.webcam_weights) + len(sensor_fusion.stereocamera_weights)
             print(f"\n=== FINAL ERROR SUMMARY ===")
-            print(f"Markers: {num_markers} tracked")
+            print(f"Total markers: {total_markers} ({len(sensor_fusion.webcam_weights)} webcam + {len(sensor_fusion.stereocamera_weights)} stereocamera)")
             print(f"  - Final webcam RMS error: {webcam_rms:.6f} m")
             print(f"  - Final webcam max error: {webcam_max:.6f} m")
             print(f"  - Total webcam squared error: {webcam_total_squared_error:.8f}")
