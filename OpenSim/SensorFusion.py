@@ -238,9 +238,14 @@ class OpenSimSensorFusion:
         
         # then find the shortest timestamps
         shortest_times = []
+        new_fps = 0
+        nb_frames = 0
         if len(times) > 0:
             shortest_times = min(times, key=len)
             print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
+            nb_frames = len(shortest_times)
+            new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * nb_frames
+            new_fps = new_fps 
         else:
             print("No data available for downsampling, skipping...")
             return
@@ -256,19 +261,35 @@ class OpenSimSensorFusion:
                 f.writelines(lines[:5])  
         if max(self.webcam_weights) != 0 and shortest_times != webcam_times:
             new_webcam_path = self.webcamMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
-            # delete all data except for the header
+            # rewrite the header
+            header = (
+                f"PathFileType\t4\t(X/Y/Z)\t{new_webcam_path}\n"
+                f"DataRate\tCameraRate\tNumFrames\tNumMarkers\tUnits\tOrigDataRate\tOrigDataStartFrame\tOrigNumFrames\n"
+                f"{new_fps}\t{new_fps}\t{nb_frames}\t12\tmm\t{new_fps}\t1\t{nb_frames}\n"
+            )
             with open(self.webcamMarkersFileName, 'r') as f:
                 lines = f.readlines()
             with open(new_webcam_path, 'w') as f:
-                f.writelines(lines[:6])  
+                f.write(header)
+                f.writelines(lines[3:6])  
         if max(self.stereocamera_weights) != 0 and shortest_times != stereocamera_times:
             new_stereocamera_path = self.stereocameraMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
             # delete all data except for the header
             with open(self.stereocameraMarkersFileName, 'r') as f:
                 lines = f.readlines()
+            # rewrite header
+            header = (
+                f"PathFileType\t4\t(X/Y/Z)\t{new_stereocamera_path}\n"
+                f"DataRate\tCameraRate\tNumFrames\tNumMarkers\tUnits\tOrigDataRate\tOrigDataStartFrame\tOrigNumFrames\n"
+                f"{new_fps}\t{new_fps}\t{nb_frames}\t15\tmm\t{new_fps}\t1\t{nb_frames}\n"
+            )
             with open(new_stereocamera_path, 'w') as f:
-                f.writelines(lines[:6])  
+                f.writelines(lines[3:6])  
 
+        index_imu = 5
+        index_webcam = 6
+        index_stereocamera = 6
+        index = 1
         # Iterate through shortest timestamps and find closest IMU orientation and closest Marker positions
         for time in shortest_times:
             # Find the closest IMU orientation if IMU weights are used
@@ -279,7 +300,7 @@ class OpenSimSensorFusion:
                 # Find the closest IMU orientation for that time, knowing that the file is sorted by time
                 closest_orientation = None
                 closest_diff = float('inf')
-                for line in lines[5:]:  # Skip header
+                for line in lines[index_imu:]:  # Skip header and skip processed lines
                     parts = line.strip().split('\t')
                     if len(parts) > 1:
                         try:
@@ -294,11 +315,14 @@ class OpenSimSensorFusion:
                             if diff < closest_diff:
                                 closest_diff = diff
                                 closest_orientation = line
+                                index_imu = lines.index(line)
                         except ValueError:
                             continue
                 if closest_orientation:
                     # change the timestamp to the current time
-                    closest_orientation = closest_orientation.replace(closest_orientation.split('\t')[0], f"{time:.6f}")
+                    parts = closest_orientation.split('\t')
+                    parts[0] = f"{time:.6f}"
+                    closest_orientation = '\t'.join(parts)
                     with open(new_imu_path, 'a') as f:
                         f.write(closest_orientation)
 
@@ -310,7 +334,7 @@ class OpenSimSensorFusion:
                 # Find the closest webcam marker positions for that time, knowing that the file is sorted by time
                 closest_markers = None
                 closest_diff = float('inf')
-                for line in lines[6:]:  # Skip header
+                for line in lines[index_webcam:]:  # Skip header
                     parts = line.strip().split('\t')
                     if len(parts) > 1:
                         try:
@@ -325,14 +349,19 @@ class OpenSimSensorFusion:
                             if diff < closest_diff:
                                 closest_diff = diff
                                 closest_markers = line
+                                index_webcam = lines.index(line)
                         except ValueError:
                             continue
                 if closest_markers:
-                    # change the timestamp to the current time
-                    closest_markers = closest_markers.replace(closest_markers.split('\t')[1], f"{time:.6f}")
+                    # change the frame number and the timestamp
+                    parts = closest_markers.split('\t')
+                    parts[0] = f"{index}"
+                    parts[1] = f"{time:.6f}"
+                    closest_markers = '\t'.join(parts)
                     with open(new_webcam_path, 'a') as f:
                         f.write(closest_markers)
-                # Find the closest stereocamera marker positions if stereocamera weights are used
+
+            # Find the closest stereocamera marker positions if stereocamera weights are used
             if max(self.stereocamera_weights) != 0 and shortest_times != stereocamera_times:
                 # Read old file
                 with open(self.stereocameraMarkersFileName, 'r') as f:
@@ -340,7 +369,7 @@ class OpenSimSensorFusion:
                 # Find the closest stereocamera marker positions for that time, knowing that the file is sorted by time
                 closest_markers = None
                 closest_diff = float('inf')
-                for line in lines[6:]:  # Skip header
+                for line in lines[index_stereocamera:]:  # Skip header
                     parts = line.strip().split('\t')
                     if len(parts) > 1:
                         try:
@@ -355,13 +384,19 @@ class OpenSimSensorFusion:
                             if diff < closest_diff:
                                 closest_diff = diff
                                 closest_markers = line
+                                index_stereocamera = lines.index(line)
                         except ValueError:
                             continue
                 if closest_markers:
-                    # change the timestamp to the current time
-                    closest_markers = closest_markers.replace(closest_markers.split('\t')[1], f"{time:.6f}")
+                    # change the frame number and the timestamp
+                    parts = closest_markers.split('\t')
+                    parts[0] = f"{index}"
+                    parts[1] = f"{time:.6f}"
+                    closest_markers = '\t'.join(parts)
                     with open(new_stereocamera_path, 'a') as f:
                         f.write(closest_markers)
+
+            index += 1
 
 
         # Replace tables with the downsampled tables by reloading them
@@ -639,7 +674,7 @@ class OpenSimSensorFusion:
 
 def main():
     # Put log to level debug and show in terminal
-    #osim.Logger.setLevel(osim.Logger.Level_Debug)
+    osim.Logger.setLevel(osim.Logger.Level_Warn)
 
     subject_ID = input("Enter the subject ID: ")
     trial_ID = input("Enter the trial ID (movement name): ")
@@ -651,7 +686,7 @@ def main():
     model_name = 'Rajagopal'
     imu_to_opensim_rotation = Vec3(-pi/2, 39.5*pi/180, 0)  # Added +40 degrees to counter -40 degree pelvis rotation
     sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
-    sensor_fusion.resultsDirectory = 'FusionIKResults'
+    sensor_fusion.resultsDirectory = '../'+ trial_ID +'_FusionIKResults'
 
     # Get IMU data
     sensor_fusion.get_imu_data()
@@ -669,8 +704,8 @@ def main():
     #stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
     webcam_weights = [1 for _ in range(12)] 
     orientation_weights = [1 for _ in range(8)] 
-    stereocamera_weights = [0 for _ in range(15)] 
-    constraint_var = 10  #low for fusion, high for single sensor IK
+    stereocamera_weights = [1 for _ in range(15)] 
+    constraint_var = 100  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
     max_webcam_weight = max(webcam_weights)  # Use the minimum weight for all markers
@@ -1054,9 +1089,6 @@ def main():
 
         if max_orientation_weight > 0 and num_orientations > 0:
             print(f"Orientations: {num_orientations} tracked")  
-            print(f"Orientation weights:")
-            for weight in sensor_fusion.orientationWeights:
-                print(f"{weight.getWeight()}")
             print(f"  - Final RMS error: {orientation_rms*180/pi:.4f}°")
             print(f"  - Final max error: {orientation_max*180/pi:.4f}°")
             print(f"  - Total squared error: {orientation_total_squared_error:.8f}")
