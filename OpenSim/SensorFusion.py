@@ -1,10 +1,3 @@
-# TODO:
-# add support for another camera and set of markers
-# change code so another script can be used to run the sensor fusion for different parameters (weights + orientation!!)! 
-# find in the assembly code the weight for better understanding
-# does the order of calibration matter? (IMU, webcam, stereocamera)
-
-
 import opensim as osim
 from opensim import Vec3
 import numpy as np
@@ -18,6 +11,8 @@ from OpenSense_CalibrateModel import main as imu_calibrate_model
 from OpenSense_IMUDataConverter import main as convert_imu_data
 from modelScalingWebcam import main as model_scaling_webcam
 from modelScalingStereocamera import main as model_scaling_stereocamera
+from webcam_ref_frame_correction import main as correct_webcam_ref_frame
+from stereocamera_ref_frame_correction import main as correct_stereocamera_ref_frame
 
 class OpenSimSensorFusion:
     def __init__(self, model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
@@ -65,6 +60,8 @@ class OpenSimSensorFusion:
         
         imuPlacer = osim.IMUPlacer() 
 
+    def correct_webcam_data(self):
+        correct_webcam_ref_frame(self.subject_ID, self.trial_ID)
         
     def get_webcam_data(self, webcam_path = None):
         # Set up the markers file
@@ -92,18 +89,27 @@ class OpenSimSensorFusion:
         # Validate marker data for missing/invalid positions
         print("Validating webcam marker data...")
         extreme_count = 0
+        nan_count = 0
+        max = 5*1000 # 5 meters in mm
         for i in range(self.webcamMarkerTable.getNumRows()):
             row = self.webcamMarkerTable.getRowAtIndex(i)
             for j in range(row.size()):
                 marker_pos = row.getElt(0, j)
                 # Check for extremely large values
-                if (abs(marker_pos.get(0)) > 10.0 or abs(marker_pos.get(1)) > 10.0 or abs(marker_pos.get(2)) > 10.0):
+                if (abs(marker_pos.get(0)) > max or abs(marker_pos.get(1)) > max or abs(marker_pos.get(2)) > max):
                     extreme_count += 1
-        
+                if (math.isnan(marker_pos.get(0)) or math.isnan(marker_pos.get(1)) or math.isnan(marker_pos.get(2))):
+                    nan_count += 1
+
         if extreme_count > 0:
             print(f"WARNING: Found {extreme_count} extreme marker positions in webcam data (>10m from origin)")
+        elif nan_count > 0:
+            print(f"WARNING: Found {nan_count} NaN marker positions in webcam data")
         else:
             print("✓ All webcam marker positions appear reasonable")
+    
+    def correct_stereocamera_data(self):
+        correct_stereocamera_ref_frame(self.subject_ID, self.trial_ID)
 
     def get_stereocamera_data(self, stereocamera_path = None):
         # Set up the markers file
@@ -137,14 +143,19 @@ class OpenSimSensorFusion:
             for j in range(row.size()):
                 marker_pos = row.getElt(0, j)
                 # Check for NaN or extremely large values
-                if (abs(marker_pos.get(0)) > 10.0 or abs(marker_pos.get(1)) > 10.0 or abs(marker_pos.get(2)) > 10.0):
+                max = 5*1000 # 5 meters in mm
+                if (abs(marker_pos.get(0)) > max or abs(marker_pos.get(1)) > max or abs(marker_pos.get(2)) > max):
                     extreme_count += 1
                     if extreme_count < 5:  # Only print first few
                         print(f"  Extreme marker position at row {i}, marker {j}: ({marker_pos.get(0):.3f}, {marker_pos.get(1):.3f}, {marker_pos.get(2):.3f})")
-        
+                if (math.isnan(marker_pos.get(0)) or math.isnan(marker_pos.get(1)) or math.isnan(marker_pos.get(2))):
+                    nan_count += 1
+
         if extreme_count > 0:
             print(f"WARNING: Found {extreme_count} extreme marker positions in stereocamera data (>10m from origin)")
             print("This could cause the billion-scale errors you're seeing!")
+        elif nan_count > 0:
+            print(f"WARNING: Found {nan_count} NaN marker positions in stereocamera data")
         else:
             print("✓ All stereocamera marker positions appear reasonable")
         
@@ -171,6 +182,7 @@ class OpenSimSensorFusion:
 
         self.model = osim.Model(calibrated_model_path)
         self.s = self.model.initSystem()  
+        print("Model Mass:", self.model.getTotalMass(self.s))
 
         nb_markers = self.model.getMarkerSet().getSize()
         print(f"Model calibrated and scaled: {calibrated_model_path}")
@@ -455,151 +467,34 @@ class OpenSimSensorFusion:
 
         heading_rotation_vec3 = osim.OpenSenseUtilities.computeHeadingCorrection(
             self.model, self.s, quatTable, base_imu_label, direction_on_imu)
+
+        # Create heading rotation using individual axis rotations (Python OpenSim approach)
+        # Apply the rotations in sequence: X, then Y, then Z
+        rotX_heading = osim.Rotation()
+        rotX_heading.setRotationFromAngleAboutAxis(heading_rotation_vec3.get(0), osim.CoordinateAxis(0))
+        rotY_heading = osim.Rotation() 
+        rotY_heading.setRotationFromAngleAboutAxis(heading_rotation_vec3.get(1), osim.CoordinateAxis(1))
+        rotZ_heading = osim.Rotation()
+        rotZ_heading.setRotationFromAngleAboutAxis(heading_rotation_vec3.get(2), osim.CoordinateAxis(2))
         
-        heading_rotation = osim.Rotation()
-        # Apply all three rotation components
-        heading_rotation.setRotationFromAngleAboutAxis(heading_rotation_vec3.get(0), osim.CoordinateAxis(0))
-        temp_rotation_y = osim.Rotation()
-        temp_rotation_y.setRotationFromAngleAboutAxis(heading_rotation_vec3.get(1), osim.CoordinateAxis(1))
-        temp_rotation_z = osim.Rotation()
-        temp_rotation_z.setRotationFromAngleAboutAxis(heading_rotation_vec3.get(2), osim.CoordinateAxis(2))
+        # Apply rotations in sequence to achieve the same effect as SpaceRotationSequence
+        osim.OpenSenseUtilities.rotateOrientationTable(quatTable, rotX_heading)
+        osim.OpenSenseUtilities.rotateOrientationTable(quatTable, rotY_heading)
+        osim.OpenSenseUtilities.rotateOrientationTable(quatTable, rotZ_heading)
         
-        # Manually compose rotations (X * Y * Z sequence)
-        # Since we can't multiply directly, we'll apply them in sequence to the quaternion table
-        # But apply reduced corrections to preserve legitimate motion
-        
-        # Calculate the magnitude of correction needed
+        # Calculate the magnitude of correction for logging
         correction_magnitude = math.sqrt(heading_rotation_vec3.get(0)**2 + 
                                     heading_rotation_vec3.get(1)**2 + 
                                     heading_rotation_vec3.get(2)**2)
         
-        ## NOT SURE WE NEED THIS PART
-        # If correction is too large (> 0.3 radians ~17 degrees), apply only partial correction
-        # max_correction = 0.1  # Maximum correction in radians (~17 degrees)
-        # if correction_magnitude > max_correction:
-        #     scale_factor = max_correction / correction_magnitude
-        #     print(f"Large heading correction detected ({correction_magnitude*180/pi:.1f}°), applying scaled correction ({scale_factor:.2f})")
-            
-        #     # Scale down each component
-        #     scaled_heading_rotation = osim.Rotation()
-        #     scaled_heading_rotation.setRotationFromAngleAboutAxis(
-        #         heading_rotation_vec3.get(0) * scale_factor, osim.CoordinateAxis(0))
-        #     scaled_temp_rotation_y = osim.Rotation()
-        #     scaled_temp_rotation_y.setRotationFromAngleAboutAxis(
-        #         heading_rotation_vec3.get(1) * scale_factor, osim.CoordinateAxis(1))
-        #     scaled_temp_rotation_z = osim.Rotation()
-        #     scaled_temp_rotation_z.setRotationFromAngleAboutAxis(
-        #         heading_rotation_vec3.get(2) * scale_factor, osim.CoordinateAxis(2))
-            
-        #     # Apply scaled corrections
-        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_heading_rotation)  # X rotation
-        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_temp_rotation_y)  # Y rotation  
-        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, scaled_temp_rotation_z)  # Z rotation
-            
-        #     print(f"Applied scaled heading correction: X={heading_rotation_vec3.get(0)*scale_factor*180/pi:.1f}°, "
-        #         f"Y={heading_rotation_vec3.get(1)*scale_factor*180/pi:.1f}°, "
-        #         f"Z={heading_rotation_vec3.get(2)*scale_factor*180/pi:.1f}°")
-        # else:
-        #     # Apply full correction for small corrections
-        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, heading_rotation)  # X rotation
-        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, temp_rotation_y)  # Y rotation  
-        #     osim.OpenSenseUtilities.rotateOrientationTable(quatTable, temp_rotation_z)  # Z rotation
-        #     print(f"Applied full heading correction: X={heading_rotation_vec3.get(0)*180/pi:.1f}°, "
-        #         f"Y={heading_rotation_vec3.get(1)*180/pi:.1f}°, "
-        #         f"Z={heading_rotation_vec3.get(2)*180/pi:.1f}°")
+        print(f"Applied heading correction: X={heading_rotation_vec3.get(0)*180/pi:.1f}°, "
+              f"Y={heading_rotation_vec3.get(1)*180/pi:.1f}°, "
+              f"Z={heading_rotation_vec3.get(2)*180/pi:.1f}° "
+              f"(magnitude: {correction_magnitude*180/pi:.1f}°)")
+        
+        # Convert orientations for further processing
         orientationData = osim.OpenSenseUtilities.convertQuaternionsToRotations(quatTable)
         self.orientationQuatTable = orientationData
-
-    def opensim_downsampling(self):
-        # Downsampling the orientation data to match marker timestamps test
-        imu_times = self.orientationQuatTable.getIndependentColumn()
-        webcam_times = self.webcamMarkerTable.getIndependentColumn()
-        stereocamera_times = self.stereocameraMarkerTable.getIndependentColumn()
-
-        print(f"IMU times: {len(imu_times)} samples")
-        print(f"Webcam times: {len(webcam_times)} samples")
-        print(f"Stereocamera times: {len(stereocamera_times)} samples")
-
-        # Create a new table for downsampled orientations, webcam and stereocamera markers
-        downsampled_orientations = osim.TimeSeriesTableRotation()  
-        downsampled_orientations.setColumnLabels(self.orientationQuatTable.getColumnLabels())
-        downsampled_webcam = osim.TimeSeriesTableVec3()
-        downsampled_webcam.setColumnLabels(self.webcamMarkerTable.getColumnLabels())
-        downsampled_stereocamera = osim.TimeSeriesTableVec3()
-        downsampled_stereocamera.setColumnLabels(self.stereocameraMarkerTable.getColumnLabels())
-
-        # Find the shortest timestamps to downsample
-        times = []
-        # first exclude data with zero weights
-        if max(self.webcam_weights) != 0 and len(webcam_times) > 0:
-            times.append(webcam_times)
-            print("Including webcam times for downsampling")
-        if max(self.stereocamera_weights) != 0 and len(stereocamera_times) > 0:
-            times.append(stereocamera_times)
-            print("Including stereocamera times for downsampling")
-        if max(self.orientation_weights) != 0 and len(imu_times) > 0:
-            times.append(imu_times)
-            print("Including IMU times for downsampling")
-        
-        # then find the shortest timestamps
-        shortest_times = []
-        if len(times) > 0:
-            shortest_times = min(times, key=len)
-            print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
-        else:
-            print("No data available for downsampling, skipping...")
-            return
-        # test: define shortest time as webcam times
-        shortest_times = webcam_times
-
-        # Iterate through shortest timestamps and find closest IMU orientation and closest Marker positions
-        for time in shortest_times:
-            # Find the closest IMU orientation if IMU weights are used
-            if max(self.orientation_weights) != 0:
-                try:
-                    imu_index = self.orientationQuatTable.getNearestRowIndexForTime(time)
-                    if imu_index >= 0:
-                        imu_row = self.orientationQuatTable.getRowAtIndex(imu_index)
-                        downsampled_orientations.appendRow(time, imu_row)
-                except Exception as e:
-                    print(f"Warning: Failed to add IMU data at time {time}: {e}")
-
-            # Find the closest webcam marker positions if webcam weights are used
-            if max(self.webcam_weights) != 0:
-                try:
-                    webcam_index = self.webcamMarkerTable.getNearestRowIndexForTime(time)
-                    if webcam_index >= 0:
-                        webcam_row = self.webcamMarkerTable.getRowAtIndex(webcam_index)
-                        downsampled_webcam.appendRow(time, webcam_row)
-                except Exception as e:
-                    print(f"Warning: Failed to add webcam data at time {time}: {e}")
-
-            # Find the closest stereocamera marker positions if stereocamera weights are used
-            if max(self.stereocamera_weights) != 0:
-                try:
-                    stereo_index = self.stereocameraMarkerTable.getNearestRowIndexForTime(time)
-                    if stereo_index >= 0:
-                        stereo_row = self.stereocameraMarkerTable.getRowAtIndex(stereo_index)
-                        downsampled_stereocamera.appendRow(time, stereo_row)
-                except Exception as e:
-                    print(f"Warning: Failed to add stereocamera data at time {time}: {e}")
-            
-
-        # Replace tables with the downsampled tables
-        self.orientationQuatTable = downsampled_orientations
-        self.stereocameraMarkerTable = downsampled_stereocamera
-        #self.webcamMarkerTable = downsampled_webcam
-        # test if webcamMarkerTable and downsampled_webcam are the same
-        # for i in range(self.webcamMarkerTable.getNumRows()):
-        #     if self.webcamMarkerTable.getRowAtIndex(i) != downsampled_webcam.getRowAtIndex(i):
-        #         for j in range(self.webcamMarkerTable.getNumColumns()):
-        #             if self.webcamMarkerTable.getRowAtIndex(i)[j] != downsampled_webcam.getRowAtIndex(i)[j]:
-        #                 print(f"Webcam marker data mismatch at row {i}, column {j}: {self.webcamMarkerTable.getRowAtIndex(i)[j]} != {downsampled_webcam.getRowAtIndex(i)[j]}")
-        #self.webcamMarkerTable = downsampled_webcam
-
-        print(f"Downsampling complete: {self.orientationQuatTable.getNumRows()} rows for orientation data, {self.stereocameraMarkerTable.getNumRows()} rows for stereocamera data, {self.webcamMarkerTable.getNumRows()} rows for webcam data")
-
-        self.times = shortest_times
 
     def load_references(self, max_orientation_weight, max_webcam_weight, max_stereocamera_weight):
         # Create OrientationsReference 
@@ -674,7 +569,7 @@ class OpenSimSensorFusion:
 
 def main():
     # Put log to level debug and show in terminal
-    osim.Logger.setLevel(osim.Logger.Level_Warn)
+    osim.Logger.setLevel(osim.Logger.Level_Info)
 
     subject_ID = input("Enter the subject ID: ")
     trial_ID = input("Enter the trial ID (movement name): ")
@@ -684,7 +579,7 @@ def main():
     subject_sex = input("Enter the subject sex (M/F): ")
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
-    imu_to_opensim_rotation = Vec3(-pi/2, 39.5*pi/180, 0)  # Added +40 degrees to counter -40 degree pelvis rotation
+    imu_to_opensim_rotation = Vec3(-pi/2, 0, 0) 
     sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
     sensor_fusion.resultsDirectory = '../'+ trial_ID +'_FusionIKResults'
 
@@ -692,25 +587,24 @@ def main():
     sensor_fusion.get_imu_data()
 
     # Get webcam marker data
+    sensor_fusion.correct_webcam_data()
     sensor_fusion.get_webcam_data()
 
     # Get stereocamera marker data
+    sensor_fusion.correct_stereocamera_data()
     sensor_fusion.get_stereocamera_data()
 
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    #webcam_weights = [10, 10, 10, 10, 1, 1, 1, 1, 0, 0, 10, 10]
-    #orientation_weights = [100, 100, 100, 100, 100, 100, 10, 10]
-    #stereocamera_weights = [50, 50, 50, 50, 50, 50, 50, 5, 5, 5, 5, 5, 50, 50, 50]
-    webcam_weights = [1 for _ in range(12)] 
-    orientation_weights = [1 for _ in range(8)] 
+    webcam_weights = [0 for _ in range(12)] 
+    orientation_weights = [0 for _ in range(8)] 
     stereocamera_weights = [1 for _ in range(15)] 
-    constraint_var = 100  #low for fusion, high for single sensor IK
+    constraint_var = 100000  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
-    max_webcam_weight = max(webcam_weights)  # Use the minimum weight for all markers
-    max_orientation_weight = max(orientation_weights)  # Use the minimum weight for all orientations
-    max_stereocamera_weight = max(stereocamera_weights)  # Use the minimum weight for all stereocamera markers
+    max_webcam_weight = max(webcam_weights)  # max weight for all markers
+    max_orientation_weight = max(orientation_weights)  # max weight for all orientations
+    max_stereocamera_weight = max(stereocamera_weights)  # maxweight for all stereocamera markers
 
     # Manual file downsampling and then reloading tables
     sensor_fusion.manual_downsampling()
@@ -898,13 +792,17 @@ def main():
                 ikSolver.computeCurrentSquaredMarkerErrors(marker_errors)
                 
                 if marker_errors.size() > 0:
-                    num_webcam_markers = len(sensor_fusion.webcam_weights)
-                    num_stereocamera_markers = len(sensor_fusion.stereocamera_weights) 
+                    if max_webcam_weight > 0 and max_stereocamera_weight > 0:
+                        num_webcam_markers = len(sensor_fusion.webcam_weights)
+                        num_stereocamera_markers = len(sensor_fusion.stereocamera_weights) 
+                    elif max_webcam_weight > 0:
+                        num_webcam_markers = len(sensor_fusion.webcam_weights)
+                        num_stereocamera_markers = 0
+                    else:
+                        num_webcam_markers = 0
+                        num_stereocamera_markers = len(sensor_fusion.stereocamera_weights)
                     max_webcam_squared_error = 0.0
                     max_stereocamera_squared_error = 0.0
-                    
-                    # Debug: Print marker error array info
-                    print(f"Debug: marker_errors.size()={marker_errors.size()}, num_webcam_markers={num_webcam_markers}, num_stereocamera_markers={num_stereocamera_markers}")
                     
                     # Validate that we have enough error values for all markers
                     expected_markers = num_webcam_markers + num_stereocamera_markers
