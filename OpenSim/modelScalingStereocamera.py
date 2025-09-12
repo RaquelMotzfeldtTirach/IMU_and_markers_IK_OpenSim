@@ -28,7 +28,7 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/stereocamera_markers.xml"
         scaler = tag.find('MarkerPlacer')
         scaler.find('marker_file').text = static_trial_path  
-        scaler.find('output_model_file').text = output_model_file_1
+        #scaler.find('output_model_file').text = "test.osim"
         scaler.find('time_range').text = str(initial_time) + " " + str(initial_time + 10.0) # first 10 seconds of static trial
 
 
@@ -59,6 +59,9 @@ def print_marker_file_names(scale_tool):
 
     model_path = scale_tool.getGenericModelMaker().getModelFileName()
     print("Model File Name:", model_path)
+
+    final_model_path = scale_tool.getMarkerPlacer().getOutputModelFileName()
+    print("Final Model File Name:", final_model_path)
     
     print()
 
@@ -102,6 +105,12 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
 
     # Run the Scale Tool
     run_scaling(scale_tool)
+    new_model = scale_tool.createModel()
+    print("Number of markers in the new model:", new_model.getNumMarkers())
+    new_model.printToXML("hello.osim")
+    ## TODO 
+    # fix the saving of the scaled and marker places model with the correct output name! 
+    # check that markers have false to "fixed" property, so they can actually be moved 
 
     return output_model_file
 

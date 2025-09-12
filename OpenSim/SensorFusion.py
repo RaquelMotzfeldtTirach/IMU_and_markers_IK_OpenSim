@@ -569,7 +569,7 @@ class OpenSimSensorFusion:
 
 def main():
     # Put log to level debug and show in terminal
-    osim.Logger.setLevel(osim.Logger.Level_Debug)
+    osim.Logger.setLevel(osim.Logger.Level_Info)
 
     subject_ID = input("Enter the subject ID: ")
     trial_ID = input("Enter the trial ID (movement name): ")
