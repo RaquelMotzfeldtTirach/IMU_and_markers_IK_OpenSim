@@ -10,7 +10,7 @@ def load_model(model_path):
     print("Name of the model:", model.getName())
     return model
 
-def create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path):
+def create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time):
     """Create a configuration file for the Scale Tool."""
     tree = ET.parse(config_template_path)
     root = tree.getroot()
@@ -26,6 +26,10 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         scaler = tag.find('GenericModelMaker')
         scaler.find('model_file').text = "../../" + model_path
         scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/webcam_markers.xml"
+        scaler = tag.find('MarkerPlacer')
+        scaler.find('marker_file').text = static_trial_path  
+        scaler.find('output_model_file').text = output_model_file
+        scaler.find('time_range').text = str(initial_time) + " " + str(initial_time + 10.0) # first 10 seconds of static trial
 
 
     new_file_path = 'recordings/subject'+ subject_ID +'/webcam_scaling_setup_'+ mvt_ID +'.xml'
@@ -66,7 +70,7 @@ def run_scaling(scale_tool):
 
 def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_sex, model_path):
     """Main entry point of the script."""
-    config_template_path = 'OpenSim/scaling_setup_template.xml'
+    config_template_path = 'OpenSim/scaling_setup_template_webcam.xml'
 
     # Load the model
     model = load_model(model_path)
@@ -75,8 +79,15 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
     static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
     output_model_file = "../../OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
 
+    # Define initial time for static trial
+    # read the .trc file to get the initial time
+    with open(static_trial_path.removeprefix("../../"), 'r') as f:
+        lines = f.readlines()
+        initial_time = float(lines[6].strip().split()[1])  # Assuming time is the 6th row, second column
+    print("Initial time of the static trial:", initial_time)
+
     # Create our own config file
-    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path)
+    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time)
     print("Configuration file created at:", config_path)
 
     # Create and configure the Scale Tool
