@@ -8,7 +8,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>0.0020829626957685576 0.38050493267232022 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_RIGHT_CLAVICLE">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -16,7 +16,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.0020829626957685576 0.38050493267232022 0.088573887845213903</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_LEFT_CLAVICLE">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -24,7 +24,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.0020829626957685576 0.38050493267232022 -0.083622804477554574</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_RIGHT_SHOULDER">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -32,7 +32,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>0.0020829626957685576 0.38050493267232022 0.16636409328464813</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_LEFT_SHOULDER">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -40,7 +40,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>0.0020829626957685576 0.38050493267232022 -0.16857950959626272</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_RIGHT_ELBOW">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -48,7 +48,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>0.0029867364721473172 -0.30396375993687813 -0.00019005882208262648</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_LEFT_ELBOW">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -56,7 +56,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>0.0029867364721473172 -0.30396375993687813 0.00019005882208262648</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_LEFT_WRIST">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -64,7 +64,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.0026541437232528151 -0.23261702825808828 -0.013096628919586153</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_RIGHT_WRIST">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -72,7 +72,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>0.0026541437232528151 -0.23261702825808828 0.013096628919586153</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_SPINE_3">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -80,7 +80,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.093022699381133014 0.37176235284209197 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_SPINE_2">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -88,7 +88,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.093022699381133014 0.26516086564686486 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_SPINE_1">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -96,7 +96,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.093022699381133014 0.15219836132987427 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_PELVIS">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -104,7 +104,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.079247009761191423 -0.060299091333101656 -0.0023193788551453807</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_RIGHT_HIP">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -112,7 +112,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.079247009761191423 -0.061911978346355097 0.12189998084837972</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 			<Marker name="STEREOCAMERA_JOINT_LEFT_HIP">
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
@@ -120,7 +120,7 @@
 				<!--The fixed location of the station expressed in its parent frame.-->
 				<location>-0.079247009761191423 -0.061911978346355097 -0.12189998084837972</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
-				<fixed>true</fixed>
+				<fixed>false</fixed>
 			</Marker>
 		</objects>
 		<groups />

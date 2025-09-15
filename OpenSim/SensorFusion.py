@@ -173,7 +173,6 @@ class OpenSimSensorFusion:
         # Stereocamera scaling and marker placement
         if (max(self.stereocamera_weights) > 0):
             calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
-            calibrated_model_path = calibrated_model_path.removeprefix("../../")
         # IMU calibration
         if (max(self.orientation_weights) > 0):
             # calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID) # TODO: check if this is needed
