@@ -161,7 +161,6 @@ class OpenSimSensorFusion:
         
 
     def calibrate_model(self): 
-        ## TODO : DOES THE CALIBRATION ORDER MATTER??? we try first webcam, then stereocamera, then IMU
         calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
         # Webcam scaling and marker placement
         if (max(self.webcam_weights) > 0):
@@ -246,7 +245,17 @@ class OpenSimSensorFusion:
             times.append(imu_times)
             print("Including IMU times for downsampling")
         
-        # then find the shortest timestamps
+        # Find the lastest start time and the earliest end time
+        if len(times) > 0:
+            start_time = max([t[0] for t in times])
+            end_time = min([t[-1] for t in times])
+            print(f"Common time range for downsampling: {start_time:.4f} to {end_time:.4f} seconds")
+            # Filter each time array to the common time range
+            for i in range(len(times)):
+                times[i] = [t for t in times[i] if t >= start_time and t <= end_time]
+                print(f"Filtered times array {i} to {len(times[i])} samples")
+        
+        # then find the shortest timestamp array
         shortest_times = []
         new_fps = 0
         nb_frames = 0
@@ -294,6 +303,7 @@ class OpenSimSensorFusion:
                 f"{new_fps}\t{new_fps}\t{nb_frames}\t15\tmm\t{new_fps}\t1\t{nb_frames}\n"
             )
             with open(new_stereocamera_path, 'w') as f:
+                f.write(header)
                 f.writelines(lines[3:6])  
 
         index_imu = 5
@@ -595,9 +605,9 @@ def main():
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
     webcam_weights = [1 for _ in range(12)] 
-    orientation_weights = [0 for _ in range(8)] 
+    orientation_weights = [1 for _ in range(8)] 
     stereocamera_weights = [0 for _ in range(15)] 
-    constraint_var = 100000  #low for fusion, high for single sensor IK
+    constraint_var = 10000  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
     max_webcam_weight = max(webcam_weights)  # max weight for all markers
@@ -773,7 +783,8 @@ def main():
         # Track for this time step (assemble is called internally by track)
         ikSolver.track(sensor_fusion.s) 
     
-        # === COMPUTE AND STORE ERRORS (following OpenSim C++ pattern) ===
+        # TODO: this is probably not correct! 
+        # === COMPUTE AND STORE ERRORS ===
         
         # Marker errors
         webcam_total_squared_error = 0.0
