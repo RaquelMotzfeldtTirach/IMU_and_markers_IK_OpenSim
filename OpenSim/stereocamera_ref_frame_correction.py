@@ -126,11 +126,17 @@ def main(subject_ID, mvt_ID):
     #print(stereocamera_df.head())
 
     # TRANSLATION: to match the right hip position
-    goal_right_hip = np.array([-79.247, 878.088, 121.899]) # in mm
+    goal_middle_point_hips = np.array([-79.247, 878.088, 0]) # in mm
     # So let's fit right hip and left hip
-    stereocamera_initial_right_hip = np.array(stereocamera_df['STEREOCAMERA_JOINT_RIGHT_HIP'][0]) ## WILL CHANGE
+    stereocamera_initial_right_hip = np.array(stereocamera_df['STEREOCAMERA_JOINT_RIGHT_HIP'][0]) 
+    stereocamera_initial_left_hip = np.array(stereocamera_df['STEREOCAMERA_JOINT_LEFT_HIP'][0])
 
-    translation = goal_right_hip - stereocamera_initial_right_hip
+    # hip middle point
+    stereocamera_initial_middle_point_hips = (stereocamera_initial_right_hip + stereocamera_initial_left_hip) / 2
+    print("Stereocamera Initial Middle Point Hips:", stereocamera_initial_middle_point_hips) # should be (0, 0, 0)
+
+
+    translation = goal_middle_point_hips - stereocamera_initial_middle_point_hips
     # apply translation to all markers
     translated_rotated_stereocamera_df = apply_transformation(stereocamera_df, np.eye(3), translation)
     #print(translated1_rotated1_stereocamera_df.head())
