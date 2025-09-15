@@ -166,7 +166,6 @@ class OpenSimSensorFusion:
         # Webcam scaling and marker placement
         if (max(self.webcam_weights) > 0):
             calibrated_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
-            calibrated_model_path = calibrated_model_path.removeprefix("../../")
         else:
             # If no webcam markers are used, copy the original model
             calibrated_model_path = self.model_path
@@ -595,9 +594,9 @@ def main():
 
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    webcam_weights = [0 for _ in range(12)] 
+    webcam_weights = [1 for _ in range(12)] 
     orientation_weights = [0 for _ in range(8)] 
-    stereocamera_weights = [1 for _ in range(15)] 
+    stereocamera_weights = [0 for _ in range(15)] 
     constraint_var = 100000  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 

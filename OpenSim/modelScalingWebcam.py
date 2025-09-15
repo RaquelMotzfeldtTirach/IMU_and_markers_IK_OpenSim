@@ -10,7 +10,7 @@ def load_model(model_path):
     print("Name of the model:", model.getName())
     return model
 
-def create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time):
+def create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file_scaling, mvt_ID, model_path, initial_time):
     """Create a configuration file for the Scale Tool."""
     tree = ET.parse(config_template_path)
     root = tree.getroot()
@@ -22,13 +22,13 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         tag.find('mass').text = subject_mass  
         scaler = tag.find('ModelScaler')
         scaler.find('marker_file').text = static_trial_path  
-        scaler.find('output_model_file').text = output_model_file 
+        scaler.find('output_model_file').text = output_model_file_scaling 
         scaler = tag.find('GenericModelMaker')
         scaler.find('model_file').text = "../../" + model_path
         scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/webcam_markers.xml"
         scaler = tag.find('MarkerPlacer')
         scaler.find('marker_file').text = static_trial_path  
-        scaler.find('output_model_file').text = output_model_file
+        #scaler.find('output_model_file').text = output_model_file # This fails for some reason, so we'll do it manually, later
         scaler.find('time_range').text = str(initial_time) + " " + str(initial_time + 10.0) # first 10 seconds of static trial
 
 
@@ -67,6 +67,26 @@ def run_scaling(scale_tool):
     scale_tool.run()
     print("Scaling completed.")
 
+def create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file):
+    """Create a mixed model by combining the scaled and marker placed models."""
+    # Fetch data from marker model
+    tree_markers = ET.parse(output_model_file_markers)
+    root_markers = tree_markers.getroot()
+    for tag in root_markers.iter('Model'):
+        joints = tag.find('JointSet')
+        markers = tag.find('MarkerSet')
+
+    # Write in scaling model
+    tree = ET.parse(output_model_file_scaling.removeprefix("../../"))
+    root = tree.getroot()
+    for tag in root.iter('Model'):
+        tag.find('JointSet').clear()
+        tag.find('MarkerSet').clear()
+        tag.find('JointSet').extend(joints)
+        tag.find('MarkerSet').extend(markers)
+    
+    tree.write(output_model_file, encoding='utf-8', xml_declaration=True)
+
 
 def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_sex, model_path):
     """Main entry point of the script."""
@@ -77,7 +97,9 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
 
     # Define paths
     static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
-    output_model_file = "../../OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+    output_model_file = "OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+    output_model_file_scaling = "../../OpenSim/Models/Rajagopal/Scaled_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+    output_model_file_markers = "OpenSim/Models/Rajagopal/Marker_Placed_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
 
     # Define initial time for static trial
     # read the .trc file to get the initial time
@@ -87,7 +109,7 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
     print("Initial time of the static trial:", initial_time)
 
     # Create our own config file
-    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time)
+    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file_scaling, mvt_ID, model_path, initial_time)
     print("Configuration file created at:", config_path)
 
     # Create and configure the Scale Tool
@@ -101,6 +123,20 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
 
     # Run the Scale Tool
     run_scaling(scale_tool)
+
+    # Get the model with the markers placed
+    new_model = scale_tool.createModel()
+    # Save the new model to a file
+    new_model.printToXML(output_model_file_markers)
+
+    # Mix both scaled and marker placed models into one
+    create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file)
+
+    # Delete intermediate files
+    if os.path.exists(output_model_file_scaling.removeprefix("../../")):
+        os.remove(output_model_file_scaling.removeprefix("../../"))
+    if os.path.exists(output_model_file_markers):
+        os.remove(output_model_file_markers)
 
     return output_model_file
 
