@@ -76,34 +76,16 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     tree_markers = ET.parse(output_model_file_markers)
     root_markers = tree_markers.getroot()
     for tag in root_markers.iter('Model'):
-        #joints = tag.find('JointSet')
         markers = tag.find('MarkerSet')
 
     # Write in scaling model
     tree = ET.parse(output_model_file_scaling.removeprefix("../../"))
     root = tree.getroot()
-    #frames = []
-    #count = 0
-    #for joint_set in root.iter('JointSet'):
-    #    for obj in joint_set.iter('objects'):
-            # Find all 'frame' tags within the 'object' tags
-    #        for frame in obj.iter('frames'):
-                # Get the text content of the frame tag
-    #            frame_content = frame.text.strip() if frame.text else ""
-    #           frames.append(frame_content)
-    #print("Found so many frames in jointset: ", len(frames))
 
     for tag in root.iter('Model'):
-        #tag.find('JointSet').clear()
         tag.find('MarkerSet').clear()
-        #tag.find('JointSet').extend(joints)
         tag.find('MarkerSet').extend(markers)
-    #for joint_set in root.iter('JointSet'):
-    #    for obj in joint_set.iter('objects'):
-    #        # Find all 'frame' tags within the 'object' tags
-    #        for frame in obj.iter('frames'):
-    #            tag.text = frames[count]
-    #            count = count + 1
+  
     
     tree.write(output_model_file, encoding='utf-8', xml_declaration=True)
 

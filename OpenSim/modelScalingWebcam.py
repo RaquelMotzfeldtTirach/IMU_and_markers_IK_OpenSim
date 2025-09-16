@@ -73,16 +73,13 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     tree_markers = ET.parse(output_model_file_markers)
     root_markers = tree_markers.getroot()
     for tag in root_markers.iter('Model'):
-        joints = tag.find('JointSet')
         markers = tag.find('MarkerSet')
 
     # Write in scaling model
     tree = ET.parse(output_model_file_scaling.removeprefix("../../"))
     root = tree.getroot()
     for tag in root.iter('Model'):
-        tag.find('JointSet').clear()
         tag.find('MarkerSet').clear()
-        tag.find('JointSet').extend(joints)
         tag.find('MarkerSet').extend(markers)
     
     tree.write(output_model_file, encoding='utf-8', xml_declaration=True)
