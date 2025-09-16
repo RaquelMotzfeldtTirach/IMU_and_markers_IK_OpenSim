@@ -13,6 +13,7 @@ from modelScalingWebcam import main as model_scaling_webcam
 from modelScalingStereocamera import main as model_scaling_stereocamera
 from webcam_ref_frame_correction import main as correct_webcam_ref_frame
 from stereocamera_ref_frame_correction import main as correct_stereocamera_ref_frame
+from model_add_markers import main as model_add_markers
 
 class OpenSimSensorFusion:
     def __init__(self, model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex):
@@ -163,14 +164,20 @@ class OpenSimSensorFusion:
     def calibrate_model(self): 
         calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
         # Webcam scaling and marker placement
-        if (max(self.webcam_weights) > 0):
+        if (max(self.webcam_weights) > 0 and max(self.stereocamera_weights) == 0):
             calibrated_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
         else:
             # If no webcam markers are used, copy the original model
             calibrated_model_path = self.model_path
         # Stereocamera scaling and marker placement
-        if (max(self.stereocamera_weights) > 0):
+        if (max(self.stereocamera_weights) > 0 and max(self.webcam_weights) == 0):
             calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+        # If both Webcam and Stereocamera are being used
+        if (max(self.stereocamera_weights) > 0 and max(self.webcam_weights) > 0):
+            # first calibrate model with stereocamera data
+            calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+            # then add webcam markers to model
+            calibrated_model_path = model_add_markers(calibrated_model_path, camera_type="webcam")
         # IMU calibration
         if (max(self.orientation_weights) > 0):
             # calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID) # TODO: check if this is needed
@@ -605,14 +612,14 @@ def main():
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
     webcam_weights = [1 for _ in range(12)] 
-    orientation_weights = [1 for _ in range(8)] 
-    stereocamera_weights = [0 for _ in range(15)] 
+    orientation_weights = [0 for _ in range(8)] 
+    stereocamera_weights = [1 for _ in range(15)] 
     constraint_var = 10000  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
     max_webcam_weight = max(webcam_weights)  # max weight for all markers
     max_orientation_weight = max(orientation_weights)  # max weight for all orientations
-    max_stereocamera_weight = max(stereocamera_weights)  # maxweight for all stereocamera markers
+    max_stereocamera_weight = max(stereocamera_weights)  # maxweight for all stereocamera 
 
     # Manual file downsampling and then reloading tables
     sensor_fusion.manual_downsampling()
