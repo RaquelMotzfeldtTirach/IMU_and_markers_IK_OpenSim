@@ -263,26 +263,26 @@ class OpenSimSensorFusion:
         
         # Then find the shortest timestamp array
         shortest_times = []
-        new_fps = 0
-        nb_frames = 0
+        self.new_fps = 0
+        self.nb_frames = 0
         if len(times) > 1:
             shortest_times = min(times, key=len)
             print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
-            nb_frames = len(shortest_times)
-            new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * nb_frames
-            new_fps = new_fps 
+            self.nb_frames = len(shortest_times)
+            self.new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * self.nb_frames
+            #new_fps = new_fps 
         elif len(times) == 1:
             shortest_times = times[0]
-            nb_frames = len(shortest_times)
-            new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * nb_frames
-            new_fps = new_fps 
-        else: 
+            self.nb_frames = len(shortest_times)
+            self.new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * self.nb_frames
+            #self.new_fps = self.new_fps
+        else:
             print("No data available, downsampling aborted")
             return
         
         ### Create new downsampled files
         # IMU data
-        if max(self.orientation_weights) != 0 and nb_frames != len(imu_times):
+        if max(self.orientation_weights) != 0 and self.nb_frames != len(imu_times):
             print("Downsampling the IMU data")
             new_imu_path = self.orientation_file.replace('.sto', '_downsampled_'+ str(len(shortest_times)) +'.sto')  
             # Check if this has already been done in the past
@@ -303,7 +303,7 @@ class OpenSimSensorFusion:
             imu_downsampling = False
             imu_downsampled_exists = False
         # Webcam data
-        if max(self.webcam_weights) != 0 and nb_frames != len(webcam_times):
+        if max(self.webcam_weights) != 0 and self.nb_frames != len(webcam_times):
             print("Downsampling the Webcam data")
             new_webcam_path = self.webcamMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
             # Check if this has already been done in the past
@@ -318,7 +318,7 @@ class OpenSimSensorFusion:
                 header = (
                     f"PathFileType\t4\t(X/Y/Z)\t{new_webcam_path}\n"
                     f"DataRate\tCameraRate\tNumFrames\tNumMarkers\tUnits\tOrigDataRate\tOrigDataStartFrame\tOrigNumFrames\n"
-                    f"{new_fps}\t{new_fps}\t{nb_frames}\t12\tmm\t{new_fps}\t1\t{nb_frames}\n"
+                    f"{self.new_fps}\t{self.new_fps}\t{self.nb_frames}\t12\tmm\t{self.new_fps}\t1\t{self.nb_frames}\n"
                 )
                 with open(self.webcamMarkersFileName, 'r') as f:
                     lines = f.readlines()
@@ -330,7 +330,7 @@ class OpenSimSensorFusion:
             webcam_downsampling = False
             webcam_downsampled_exists = False
         # Stereocamera data
-        if max(self.stereocamera_weights) != 0 and nb_frames != len(stereocamera_times):
+        if max(self.stereocamera_weights) != 0 and self.nb_frames != len(stereocamera_times):
             print("Downsampling the Stereocamera data")
             new_stereocamera_path = self.stereocameraMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
             # Check if this has already been done in the past
@@ -348,7 +348,7 @@ class OpenSimSensorFusion:
                 header = (
                     f"PathFileType\t4\t(X/Y/Z)\t{new_stereocamera_path}\n"
                     f"DataRate\tCameraRate\tNumFrames\tNumMarkers\tUnits\tOrigDataRate\tOrigDataStartFrame\tOrigNumFrames\n"
-                    f"{new_fps}\t{new_fps}\t{nb_frames}\t15\tmm\t{new_fps}\t1\t{nb_frames}\n"
+                    f"{self.new_fps}\t{self.new_fps}\t{self.nb_frames}\t15\tmm\t{self.new_fps}\t1\t{self.nb_frames}\n"
                 )
                 with open(new_stereocamera_path, 'w') as f:
                     f.write(header)
@@ -624,20 +624,16 @@ class OpenSimSensorFusion:
                 # Append to combined table using proper RowVector
                 self.combined_marker_table.appendRow(time, combined_row)
             
-            # Create the combined MarkersReference
-            # check combined marker table 
-            # Set required metadata for TRC export
-            self.combined_marker_table.addTableMetaDataString("DataRate", "30")  # Placeholder, will be updated
-            self.combined_marker_table.addTableMetaDataString("CameraRate", "30")
-            self.combined_marker_table.addTableMetaDataString("NumFrames", "777")
-            self.combined_marker_table.addTableMetaDataString("NumMarkers", "27")
+            # Set required metadata 
+            self.combined_marker_table.addTableMetaDataString("DataRate", str(self.new_fps))
+            self.combined_marker_table.addTableMetaDataString("CameraRate", str(self.new_fps))
+            self.combined_marker_table.addTableMetaDataString("NumFrames", str(self.nb_frames))
+            self.combined_marker_table.addTableMetaDataString("NumMarkers", str(webcam_row.size() + stereo_row.size()))
             self.combined_marker_table.addTableMetaDataString("Units", "mm")
-            self.combined_marker_table.addTableMetaDataString("OrigDataRate", "30")
+            self.combined_marker_table.addTableMetaDataString("OrigDataRate", str(self.new_fps))
             self.combined_marker_table.addTableMetaDataString("OrigDataStartFrame", "1")
-            self.combined_marker_table.addTableMetaDataString("OrigNumFrames", "777")
-            osim.TRCFileAdapter().write(self.combined_marker_table, "HELLO_IM_COMBINED_MARKER_DATA")
-
-            # Save the combined data
+            self.combined_marker_table.addTableMetaDataString("OrigNumFrames", str(self.nb_frames))
+            # Create the combined MarkersReference
             self.mRefs = osim.MarkersReference(self.combined_marker_table, self.combinedMarkerWeights)
             print(f"MarkersReference created by combining webcam and stereocamera markers")
             weights = self.mRefs.getMarkerWeightSet()
