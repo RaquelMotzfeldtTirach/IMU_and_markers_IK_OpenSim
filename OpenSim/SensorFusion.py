@@ -180,7 +180,6 @@ class OpenSimSensorFusion:
             calibrated_model_path = model_add_markers(calibrated_model_path, camera_type="webcam")
         # IMU calibration
         if (max(self.orientation_weights) > 0):
-            # calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, orientation_file, self.subject_ID, self.trial_ID) # TODO: check if this is needed
             calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID)
         
 
@@ -241,19 +240,15 @@ class OpenSimSensorFusion:
 
         # Find the shortest timestamps to downsample
         times = []
-        times_names = []
         # first exclude data with zero weights - so data that is not being used
         if max(self.webcam_weights) > 0 and len(webcam_times) > 0:
             times.append(webcam_times)
-            times_names.append("webcam")
             print("Including webcam times for downsampling")
         if max(self.stereocamera_weights) > 0 and len(stereocamera_times) > 0:
             times.append(stereocamera_times)
-            times_names.append("stereocamera")
             print("Including stereocamera times for downsampling")
         if max(self.orientation_weights) > 0 and len(imu_times) > 0:
             times.append(imu_times)
-            times_names.append("imu")
             print("Including IMU times for downsampling")
         
         # Find the latest start time and the earliest end time
@@ -264,23 +259,20 @@ class OpenSimSensorFusion:
             # Filter each time array to the common time range
             for i in range(len(times)):
                 times[i] = [t for t in times[i] if t >= start_time and t <= end_time]
-                print(f"Filtered times array {i} to {len(times[i]) - 1} samples")
+                print(f"Filtered times array {i} to {len(times[i])} samples")
         
         # Then find the shortest timestamp array
         shortest_times = []
-        shortest_times_index = np.nan
         new_fps = 0
         nb_frames = 0
         if len(times) > 1:
             shortest_times = min(times, key=len)
-            shortest_times_index = times.index(shortest_times)
             print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
             nb_frames = len(shortest_times)
             new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * nb_frames
             new_fps = new_fps 
-        elif len(times) == 0:
+        elif len(times) == 1:
             shortest_times = times[0]
-            shortest_times_index = 0
             nb_frames = len(shortest_times)
             new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * nb_frames
             new_fps = new_fps 
@@ -290,7 +282,7 @@ class OpenSimSensorFusion:
         
         ### Create new downsampled files
         # IMU data
-        if max(self.orientation_weights) != 0 and shortest_times != times_names.index("imu"):
+        if max(self.orientation_weights) != 0 and nb_frames != len(imu_times):
             print("Downsampling the IMU data")
             new_imu_path = self.orientation_file.replace('.sto', '_downsampled_'+ str(len(shortest_times)) +'.sto')  
             # Check if this has already been done in the past
@@ -311,7 +303,7 @@ class OpenSimSensorFusion:
             imu_downsampling = False
             imu_downsampled_exists = False
         # Webcam data
-        if max(self.webcam_weights) != 0 and shortest_times != times_names.index("webcam"):
+        if max(self.webcam_weights) != 0 and nb_frames != len(webcam_times):
             print("Downsampling the Webcam data")
             new_webcam_path = self.webcamMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
             # Check if this has already been done in the past
@@ -338,7 +330,7 @@ class OpenSimSensorFusion:
             webcam_downsampling = False
             webcam_downsampled_exists = False
         # Stereocamera data
-        if max(self.stereocamera_weights) != 0 and shortest_times != times_names.index("stereocamera"):
+        if max(self.stereocamera_weights) != 0 and nb_frames != len(stereocamera_times):
             print("Downsampling the Stereocamera data")
             new_stereocamera_path = self.stereocameraMarkersFileName.replace('.trc', '_downsampled_'+ str(len(shortest_times)) +'.trc')
             # Check if this has already been done in the past
@@ -633,6 +625,19 @@ class OpenSimSensorFusion:
                 self.combined_marker_table.appendRow(time, combined_row)
             
             # Create the combined MarkersReference
+            # check combined marker table 
+            # Set required metadata for TRC export
+            self.combined_marker_table.addTableMetaDataString("DataRate", "30")  # Placeholder, will be updated
+            self.combined_marker_table.addTableMetaDataString("CameraRate", "30")
+            self.combined_marker_table.addTableMetaDataString("NumFrames", "777")
+            self.combined_marker_table.addTableMetaDataString("NumMarkers", "27")
+            self.combined_marker_table.addTableMetaDataString("Units", "mm")
+            self.combined_marker_table.addTableMetaDataString("OrigDataRate", "30")
+            self.combined_marker_table.addTableMetaDataString("OrigDataStartFrame", "1")
+            self.combined_marker_table.addTableMetaDataString("OrigNumFrames", "777")
+            osim.TRCFileAdapter().write(self.combined_marker_table, "HELLO_IM_COMBINED_MARKER_DATA")
+
+            # Save the combined data
             self.mRefs = osim.MarkersReference(self.combined_marker_table, self.combinedMarkerWeights)
             print(f"MarkersReference created by combining webcam and stereocamera markers")
             weights = self.mRefs.getMarkerWeightSet()
@@ -658,6 +663,7 @@ def main():
     # Get IMU data
     sensor_fusion.get_imu_data()
 
+    # TODO: webcam + stereocamera together fails miserably 
     # Get webcam marker data and correct its coordinate system
     sensor_fusion.correct_webcam_data()
     sensor_fusion.get_webcam_data()
@@ -668,10 +674,17 @@ def main():
 
     # Set weights for sensor fusion
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    webcam_weights = [0 for _ in range(12)] 
-    orientation_weights = [1 for _ in range(8)] 
-    stereocamera_weights = [1000 for _ in range(15)] 
-    constraint_var = 10000  #low for fusion, high for single sensor IK
+    # Notes: for now changing weights within a single sensor works and changes the output, but changing weights between sensors does not seem to have an effect
+    # TODO: find mathematical alternative, cheat the system! 
+
+    # right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, right pinky, left pinky, right index, left index, right hip, left hip
+    webcam_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
+    # torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
+    orientation_weights = [1, 1, 0, 0, 0, 0, 0, 0] 
+    # neck, right clavicle, left clavicle, right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, spine 3, spine 2, spine 1, pelvis, right hip, left hip
+    stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
+
+    constraint_var = 100000  #low for fusion, high for single sensor IK
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
     is_webcam_used = max(webcam_weights) > 0  
@@ -700,6 +713,8 @@ def main():
     else : 
         # No constraint variable means Infinite weight, so the joint limits have to be applied, this is the default value for the InverseKinematicsSolver
         ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, sensor_fusion.mRefs, sensor_fusion.oRefs, coordinateReferences)
+
+
     accuracy = 1e-9  # Same as C++ implementation, probably default value
     ikSolver.setAccuracy(accuracy)
     print(f"\n=== SOLVER CONFIGURATION ANALYSIS ===")
@@ -837,25 +852,6 @@ def main():
     else:
         num_orientations = 0
 
-    # Initialise marker errors
-    webcam_total_squared_error = 0.0
-    webcam_rms = 0.0
-    webcam_max = 0.0
-    stereocamera_total_squared_error = 0.0
-    stereocamera_rms = 0.0
-    stereocamera_max = 0.0
-    individual_marker_errors = []
-    max_webcam_squared_error = 0.0
-    max_stereocamera_squared_error = 0.0
-
-    # Orientation errors
-    orientation_total_squared_error = 0.0
-    orientation_rms = 0.0
-    orientation_max = 0.0
-    num_orientations = 0
-    individual_orientation_errors = []
-    max_squared_error = 0.0
-
 
     # Initialize the solver at the first time point 
     # Use the first time from our filtered times array
@@ -886,7 +882,24 @@ def main():
         # Track for this time step (assemble is called internally by track)
         ikSolver.track(sensor_fusion.s) 
 
-        
+        # Initialise marker errors
+        webcam_total_squared_error = 0.0
+        webcam_rms = 0.0
+        webcam_max = 0.0
+        stereocamera_total_squared_error = 0.0
+        stereocamera_rms = 0.0
+        stereocamera_max = 0.0
+        individual_marker_errors = []
+        max_webcam_squared_error = 0.0
+        max_stereocamera_squared_error = 0.0
+
+        # Orientation errors
+        orientation_total_squared_error = 0.0
+        orientation_rms = 0.0
+        orientation_max = 0.0
+        individual_orientation_errors = []
+        max_squared_error = 0.0
+
         if is_webcam_used or is_stereocamera_used:
             try:
                 marker_errors = osim.SimTKArrayDouble()
@@ -1079,8 +1092,8 @@ def main():
         print(f"Error saving error files: {e}")
 
     # Save main results as .mot file
-    motFileName = resultsDirectory + "/inverse_kinematics_results.mot"
-    storage.printResult(storage, "inverse_kinematics_results", resultsDirectory, -1, ".mot")
+    motFileName = resultsDirectory + "/inverse_kinematics_results_subject_"+str(sensor_fusion.subject_ID)+"_trial_"+str(sensor_fusion.trial_ID)+".mot"
+    storage.printResult(storage, "inverse_kinematics_results_subject_"+str(sensor_fusion.subject_ID)+"_trial_"+str(sensor_fusion.trial_ID), resultsDirectory, -1, ".mot")
     print(f"Results saved to: {motFileName}")
     
     print("Script execution completed successfully.")
