@@ -180,7 +180,7 @@ class OpenSimSensorFusion:
             calibrated_model_path = model_add_markers(calibrated_model_path, camera_type="webcam")
         # IMU calibration
         if (max(self.orientation_weights) > 0):
-            calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID)
+            calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID, visulizeCalibration = False)
         
 
         self.model = osim.Model(calibrated_model_path)
