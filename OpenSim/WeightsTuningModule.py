@@ -31,14 +31,14 @@ def read_mot_file(filepath):
 def compare_joint_angles(df1, df2):
     return df1 - df2
 
-def objective(trial, output, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
+def objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
     # Define weight parameters to optimize
     webcam_weights = [trial.suggest_float(f'webcam_weight_{i}', 0.0, 10.0) for i in range(12)]  # Example: 12 webcam weights
     orientation_weights = [trial.suggest_float(f'orientation_weight_{i}', 0.0, 10.0) for i in range(8)]  # Example: 8 orientation weights
     stereocamera_weights = [trial.suggest_float(f'stereocamera_weight_{i}', 0.0, 10.0) for i in range(15)]  # Example: 15 stereocamera weights
 
     # Count weights that are non null
-    non_null_weights = sum(1 for w in webcam_weights + orientation_weights + stereocamera_weights if w > 0)
+    non_null_weights = sum(1 for w in orientation_weights if w > 0)
     non_null_weights_ratio = 1 # TODO: adjust to the scale of the errors
 
     # Run IK with updated weights
@@ -50,7 +50,7 @@ def objective(trial, output, ground_truth_df, constraint_var, subject_ID, trial_
     # Compare with ground truth
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
-    return np.sum(error_df.abs().values) + non_null_weights * non_null_weights_ratio  # Example: minimize the sum of absolute errors
+    return np.sum(error_df.abs().values) + non_null_weights * non_null_weights_ratio  # Example: minimize the sum of absolute errors and minimise the number of IMUs
 
 
 def main():
@@ -63,16 +63,11 @@ def main():
     subject_sex = input("Enter the subject sex (M/F): ")
 
     # Default weights
-    # right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, right pinky, left pinky, right index, left index, right hip, left hip
-    webcam_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
-    # torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
-    orientation_weights = [1, 1, 1, 1, 1, 1, 1, 1] 
-    # neck, right clavicle, left clavicle, right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, spine 3, spine 2, spine 1, pelvis, right hip, left hip
-    stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
-    constraint_var = 1000
+    # WEBCAM WEIGHTS: right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, right pinky, left pinky, right index, left index, right hip, left hip
+    # ORIENTATION WEIGHTS: torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
+    # STEREOCAMERA WEIGHTS: neck, right clavicle, left clavicle, right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, spine 3, spine 2, spine 1, pelvis, right hip, left hip
 
-    # Initial run of the Fusuion IK with default weights
-    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+    constraint_var = 1000
 
     # Ground truth IK run - Vicon
     ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex) #TODO 
@@ -80,7 +75,7 @@ def main():
 
     # Optimization setup
     study = optuna.create_study(direction='minimize')
-    study.optimize(lambda trial: objective(trial, output, ground_truth_df, webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
+    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
 
     # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
 

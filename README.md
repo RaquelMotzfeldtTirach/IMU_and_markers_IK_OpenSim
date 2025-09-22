@@ -12,7 +12,7 @@ The framework includes automated data conversion, model calibration, temporal sy
 
 ## Requirements
 - Linux, ubuntu 24.04 (not tested on previous versions)
-- Conda with OpenSim package
+- Conda with OpenSim package and pandas, numpy, os, optuna, etc
 
 ## Setup Instructions
 
@@ -40,3 +40,5 @@ The framework includes automated data conversion, model calibration, temporal sy
 
 ## Usage 
 
+  conda activate opensim_scripting
+  
