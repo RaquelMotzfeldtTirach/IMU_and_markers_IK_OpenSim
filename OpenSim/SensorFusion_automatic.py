@@ -52,7 +52,7 @@ class OpenSimSensorFusion:
 
     def get_imu_data(self):
         # Convert IMU data
-        self.orientation_file = convert_imu_data(self.subject_ID, self.trial_ID)
+        self.orientation_file = convert_imu_data(self.subject_ID, self.trial_ID, defaultMapping = True)
         print(f"IMU data converted and saved to: {self.orientation_file}")
 
         # Get the orientation labels from the converted file
@@ -640,16 +640,10 @@ class OpenSimSensorFusion:
             print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
 
 
-def main():
+def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
     # Put log to level debug and show in terminal
     osim.Logger.setLevel(osim.Logger.Level_Info)
 
-    subject_ID = input("Enter the subject ID: ")
-    trial_ID = input("Enter the trial ID (movement name): ")
-    subject_mass = input("Enter the subject mass (kg): ")
-    subject_height = input("Enter the subject height (mm): ")
-    subject_age = input("Enter the subject age (years): ")
-    subject_sex = input("Enter the subject sex (M/F): ")
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
     imu_to_opensim_rotation = Vec3(-pi/2, 0, 0) 
@@ -667,19 +661,10 @@ def main():
     sensor_fusion.correct_stereocamera_data()
     sensor_fusion.get_stereocamera_data()
 
-    # Set weights for sensor fusion
+    # Weights for sensor fusion are set by the weight tuning module
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
     # Notes: for now changing weights within a single sensor works and changes the output, but changing weights between sensors does not seem to have an effect
-    # TODO: find mathematical alternative, cheat the system! 
-
-    # right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, right pinky, left pinky, right index, left index, right hip, left hip
-    webcam_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
-    # torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
-    orientation_weights = [1, 1, 0, 0, 0, 0, 0, 0] 
-    # neck, right clavicle, left clavicle, right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, spine 3, spine 2, spine 1, pelvis, right hip, left hip
-    stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
-
-    constraint_var = 100000  #low for fusion, high for single sensor IK
+    
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
     is_webcam_used = max(webcam_weights) > 0  
@@ -1092,11 +1077,25 @@ def main():
     print(f"Results saved to: {motFileName}")
     
     print("Script execution completed successfully.")
+
     
-    # Exit immediately to prevent segmentation fault during OpenSim object destruction
-    os._exit(0)
+    return motFileName
 
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="SensorFusion based inverse kinematics using OpenSim")
+    parser.add_argument("webcam_weights", type=lambda s: [float(item) for item in s.split(',')], help="Comma-separated list of webcam marker weights")
+    parser.add_argument("orientation_weights", type=lambda s: [float(item) for item in s.split(',')], help="Comma-separated list of IMU orientation weights")
+    parser.add_argument("stereocamera_weights", type=lambda s: [float(item) for item in s.split(',')], help="Comma-separated list of stereocamera marker weights")
+    parser.add_argument("constraint_var", type=float, help="Constraint variable (use a large number like 10000 for infinite weight)")
+    parser.add_argument("subject_ID", type=str, help="Subject ID")
+    parser.add_argument("trial_ID", type=str, help="Trial name")
+    parser.add_argument("subject_mass", type=float, help="Subject mass in kg")
+    parser.add_argument("subject_height", type=float, help="Subject height in mm")
+    parser.add_argument("subject_age", type=int, help="Subject age in years")
+    parser.add_argument("subject_sex", type=str, choices=['M', 'F'], help="Subject sex (M/F)")
+
+    args = parser.parse_args()
+
+    main(args.subject_ID, args.trial_ID, args.webcam_weights, args.orientation_weights, args.stereocamera_weights, args.constraint_var, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex)

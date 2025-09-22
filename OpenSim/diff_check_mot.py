@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 def read_mot_file(filepath):
     """Reads a .mot file and returns the header, column labels, and data as a numpy array."""
@@ -86,7 +87,10 @@ def plot_column_differences(columns_to_plot, columns1, data1, data2, time=None, 
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python diff_check_mot.py file1.mot file2.mot")
-        sys.exit(1)
-    compare_mot_files(sys.argv[1], sys.argv[2])
+    parser = argparse.ArgumentParser(description="Comparing two mot files")
+    parser.add_argument("mot_file_1", type=str, help="Path to the first .mot file")
+    parser.add_argument("mot_file_2", type=str, help="Path to the second .mot file")
+
+    args = parser.parse_args()
+
+    compare_mot_files(args.mot_file_1, args.mot_file_2)

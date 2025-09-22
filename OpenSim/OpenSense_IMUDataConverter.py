@@ -35,12 +35,15 @@ import argparse
 # Build an Xsens Settings Object. 
 # Instantiate the Reader Settings Class
 
-def main(subject_ID, trial_ID):
-    usualMapping = input('Are you using the usual IMU Mappings file? (y/n): ')
-    if usualMapping.lower() == 'y':
-        mappingFile = "OpenSim/defaultIMUMappings.xml"
+def main(subject_ID, trial_ID, defaultMapping = False):
+    if not defaultMapping:
+        usualMapping = input('Are you using the usual IMU Mappings file? (y/n): ')
+        if usualMapping.lower() == 'y':
+            mappingFile = "OpenSim/defaultIMUMappings.xml"
+        else:
+            mappingFile = input('Please enter the IMU Mappings file path (e.g. IMUMappings.xml): ')
     else:
-        mappingFile = input('Please enter the IMU Mappings file path (e.g. IMUMappings.xml): ')
+        mappingFile = "OpenSim/defaultIMUMappings.xml"
 
     # edit IMU Mappings file to set the trial prefix
     tree = ET.parse(mappingFile)
