@@ -1,10 +1,59 @@
-from SensorFusion_automatic import main as sensor_fusion
 import os
 import shutil
-from diff_check_mot import compare_mot_files
+import numpy as np
+import pandas as pd
+import optuna
+from SensorFusion_automatic import main as sensor_fusion
+from ViconIK import main as vicon_ik
+
+def read_mot_file(filepath):
+    """Reads a .mot file and returns the header, column labels, and data as a pandas DataFrame."""
+    header = []
+    data = []
+    columns = []
+    with open(filepath, 'r') as f:
+        in_header = True
+        for line in f:
+            if in_header:
+                header.append(line)
+                if line.strip().startswith('endheader'):
+                    in_header = False
+            elif not columns:
+                columns = line.strip().split('\t')
+            else:
+                if line.strip() == '':
+                    continue
+                row = [float(x) for x in line.strip().split()]
+                data.append(row)
+    df = pd.DataFrame(data, columns=columns)
+    return header, columns, df
+
+def compare_joint_angles(df1, df2):
+    return df1 - df2
+
+def objective(trial, output, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
+    # Define weight parameters to optimize
+    webcam_weights = [trial.suggest_float(f'webcam_weight_{i}', 0.0, 10.0) for i in range(12)]  # Example: 12 webcam weights
+    orientation_weights = [trial.suggest_float(f'orientation_weight_{i}', 0.0, 10.0) for i in range(8)]  # Example: 8 orientation weights
+    stereocamera_weights = [trial.suggest_float(f'stereocamera_weight_{i}', 0.0, 10.0) for i in range(15)]  # Example: 15 stereocamera weights
+
+    # Count weights that are non null
+    non_null_weights = sum(1 for w in webcam_weights + orientation_weights + stereocamera_weights if w > 0)
+    non_null_weights_ratio = 1 # TODO: adjust to the scale of the errors
+
+    # Run IK with updated weights
+    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+    
+    # Read latest output
+    latest_ik_results_df = read_mot_file(output)
+
+    # Compare with ground truth
+    error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
+
+    return np.sum(error_df.abs().values) + non_null_weights * non_null_weights_ratio  # Example: minimize the sum of absolute errors
+
 
 def main():
-
     # Get inputs from user
     subject_ID = input("Enter the subject ID: ")
     trial_ID = input("Enter the trial ID (movement name): ")
@@ -22,24 +71,18 @@ def main():
     stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] 
     constraint_var = 1000
 
-    # Easy experiment: vary orientation weights only, one by one
-    # output saved in new folder
-    folder_path = f'recordings/subject{subject_ID}/tuning_{trial_ID}'
-    os.makedirs(folder_path, exist_ok=True)
+    # Initial run of the Fusuion IK with default weights
+    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
 
-    output_original = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    # copy output file to new folder
-    shutil.copy(output_original, folder_path + f'/output_original.mot')
+    # Ground truth IK run - Vicon
+    ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex) #TODO 
+    ground_truth_df = read_mot_file(ground_truth_ik_file)
 
+    # Optimization setup
+    study = optuna.create_study(direction='minimize')
+    study.optimize(lambda trial: objective(trial, output, ground_truth_df, webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
 
-    for i in range(len(orientation_weights)):
-        orientation_weights[i] = 0.1
-        output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-        # copy output file to new folder
-        shutil.copy(output, folder_path + f'/output_{i}.mot')
-
-    for i in range(len(orientation_weights)):
-        compare_mot_files(folder_path + f'/output_original.mot', folder_path + f'/output_{i}.mot')
+    # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
 
 if __name__ == "__main__":
     main()
