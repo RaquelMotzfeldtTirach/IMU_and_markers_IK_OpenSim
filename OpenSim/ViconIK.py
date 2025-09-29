@@ -8,6 +8,7 @@ import os
 import shutil
 import time
 from modelScalingVicon import main as model_scaling_vicon
+from vicon_ref_frame_correction import main as correct_vicon_ref_frame
 
 # TODO: 
 # - Change marker xml file for vicon markers
@@ -84,6 +85,9 @@ class OpenSimVicon:
             print(f"WARNING: Found {nan_count} NaN marker positions in vicon data")
         else:
             print("✓ All vicon marker positions appear reasonable")
+
+    def correct_reference_frame(self):
+        correct_vicon_ref_frame(self.subject_ID, self.trial_ID)
         
 
     def calibrate_model(self): 
@@ -115,29 +119,31 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
 
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
-    sensor_fusion = OpenSimVicon(model_path, model_name, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    sensor_fusion.resultsDirectory = '../'+ trial_ID +'_ViconIKResults'
-    sensor_fusion.constraint_var = constraint_var
+    viconIK = OpenSimVicon(model_path, model_name, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+    viconIK.resultsDirectory = '../'+ trial_ID +'_ViconIKResults'
+    viconIK.constraint_var = constraint_var
 
+    # Correct ref frame
+    viconIK.correct_reference_frame()
     # Get Vicon data
-    sensor_fusion.get_vicon_data()
+    viconIK.get_vicon_data()
 
     # Calibrate the model
-    calibrated_model_path = sensor_fusion.calibrate_model()
+    calibrated_model_path = viconIK.calibrate_model()
     print(f"Calibrated model saved to: {calibrated_model_path}")
 
 
     # Load the marker references
-    sensor_fusion.load_references()
+    viconIK.load_references()
     
 
     # Create the solver
     coordinateReferences = osim.SimTKArrayCoordinateReference()
-    if sensor_fusion.constraint_var < 10000:
-        ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, sensor_fusion.mRefs, coordinateReferences, sensor_fusion.constraint_var) 
+    if viconIK.constraint_var < 10000:
+        ikSolver = osim.InverseKinematicsSolver(viconIK.model, viconIK.mRefs, coordinateReferences, viconIK.constraint_var) 
     else : 
         # No constraint variable means Infinite weight, so the joint limits have to be applied, this is the default value for the InverseKinematicsSolver
-        ikSolver = osim.InverseKinematicsSolver(sensor_fusion.model, sensor_fusion.mRefs, coordinateReferences)
+        ikSolver = osim.InverseKinematicsSolver(viconIK.model, viconIK.mRefs, coordinateReferences)
 
 
     accuracy = 1e-9  # Same as C++ implementation, probably default value
@@ -145,19 +151,19 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
     print(f"\n=== SOLVER CONFIGURATION ANALYSIS ===")
     # Check what the solver actually sees
     print(f"Solver configuration:")
-    print(f"  - Markers reference: {sensor_fusion.mRefs.getNumFrames() if hasattr(sensor_fusion.mRefs, 'getNumFrames') else 'unknown'} frames")
-    print(f"  - Constraint variable: {sensor_fusion.constraint_var}")
+    print(f"  - Markers reference: {viconIK.mRefs.getNumFrames() if hasattr(viconIK.mRefs, 'getNumFrames') else 'unknown'} frames")
+    print(f"  - Constraint variable: {viconIK.constraint_var}")
     print(f"  - Accuracy: {accuracy}")
     print("="*60)
 
 
     # Initialize the model  
     # Realize position to ensure model is properly initialized
-    sensor_fusion.model.realizePosition(sensor_fusion.s)
+    viconIK.model.realizePosition(viconIK.s)
 
     # Define the overlapping time range for combined mode
     # Get the actual time range - use overlapping time range for combined mode
-    times = sensor_fusion.viconMarkerTable.getIndependentColumn()
+    times = viconIK.viconMarkerTable.getIndependentColumn()
     startTime = times[0]  
     endTime = times[-1]
 
@@ -167,8 +173,8 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
 
 
     ## For saving the results
-    directory = sensor_fusion.viconMarkersFileName.rpartition('/')[0] 
-    resultsDirectory = directory + '/' + sensor_fusion.resultsDirectory 
+    directory = viconIK.viconMarkersFileName.rpartition('/')[0] 
+    resultsDirectory = directory + '/' + viconIK.resultsDirectory 
     # Create results directory if it doesn't exist
     os.makedirs(resultsDirectory, exist_ok=True) 
 
@@ -179,7 +185,7 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
     storage.setInDegrees(True) 
     
     # Get coordinate names for the header
-    coordSet = sensor_fusion.model.getCoordinateSet() 
+    coordSet = viconIK.model.getCoordinateSet() 
     numCoords = coordSet.getSize() 
     
     # Set column labels
@@ -206,25 +212,25 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
     vicon_labels.append("vicon_error_max")
 
     # Add individual vicon error columns
-    for label in sensor_fusion.viconLabels:
+    for label in viconIK.viconLabels:
         vicon_labels.append(f"{str(label)}_error")
 
     vicon_errors_storage.setColumnLabels(vicon_labels)
 
     # Initialise nb of markers
-    num_markers = len(sensor_fusion.viconMarkerLabels)
+    num_markers = len(viconIK.viconMarkerLabels)
 
 
     # Initialize the solver at the first time point 
     # Use the first time from our filtered times array
     first_time = times[0]
-    sensor_fusion.s.setTime(first_time) 
+    viconIK.s.setTime(first_time) 
 
     # Realize position before assembly (important for stability)
-    sensor_fusion.model.realizePosition(sensor_fusion.s)
+    viconIK.model.realizePosition(viconIK.s)
     
     # Assemble the model at the first time point
-    ikSolver.assemble(sensor_fusion.s)   # Only assemble once at the beginning
+    ikSolver.assemble(viconIK.s)   # Only assemble once at the beginning
     print(f"IK Solver initialized and assembled. Starting processing...") 
     
     # Start timing
@@ -239,10 +245,10 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
             print(f"Processing frame {i+1}/{numTimeSteps}: {time_val:.4f}s") 
             
         # Set the state to current time
-        sensor_fusion.s.setTime(time_val) 
+        viconIK.s.setTime(time_val) 
 
         # Track for this time step (assemble is called internally by track)
-        ikSolver.track(sensor_fusion.s) 
+        ikSolver.track(viconIK.s) 
 
         # Initialise marker errors
         vicon_total_squared_error = 0.0
@@ -298,7 +304,7 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
         coordValues = osim.Vector(numCoords, 0.0)   # Initialize with size and default value
         for j in range(numCoords):
             coord = coordSet.get(j) 
-            value = coord.getValue(sensor_fusion.s) 
+            value = coord.getValue(viconIK.s) 
             coord_name = coord.getName()
             
             # Convert rotational coordinates from radians to degrees
@@ -316,7 +322,7 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
     print(f"IK processing completed for {numTimeSteps} frames in {elapsed_time:.2f} seconds.")
     
     # Save all error files (following OpenSim C++ pattern)
-    trial_name = f"subject{sensor_fusion.subject_ID}_{sensor_fusion.trial_ID}"
+    trial_name = f"subject{viconIK.subject_ID}_{viconIK.trial_ID}"
     
     try:
         # Save marker errors
@@ -338,8 +344,8 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
         print(f"Error saving error files: {e}")
 
     # Save main results as .mot file
-    motFileName = resultsDirectory + "/inverse_kinematics_results_subject_"+str(sensor_fusion.subject_ID)+"_trial_"+str(sensor_fusion.trial_ID)+".mot"
-    storage.printResult(storage, "inverse_kinematics_results_subject_"+str(sensor_fusion.subject_ID)+"_trial_"+str(sensor_fusion.trial_ID), resultsDirectory, -1, ".mot")
+    motFileName = resultsDirectory + "/inverse_kinematics_results_subject_"+str(viconIK.subject_ID)+"_trial_"+str(viconIK.trial_ID)+".mot"
+    storage.printResult(storage, "inverse_kinematics_results_subject_"+str(viconIK.subject_ID)+"_trial_"+str(viconIK.trial_ID), resultsDirectory, -1, ".mot")
     print(f"Results saved to: {motFileName}")
     
     print("Script execution completed successfully.")
