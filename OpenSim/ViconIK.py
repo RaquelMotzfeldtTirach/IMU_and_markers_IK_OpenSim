@@ -91,9 +91,8 @@ class OpenSimVicon:
         
 
     def calibrate_model(self): 
-        calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
         # Vicon scaling and marker placement
-        calibrated_model_path = model_scaling_vicon(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+        calibrated_model_path = model_scaling_vicon(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
 
         self.model = osim.Model(calibrated_model_path)
         self.s = self.model.initSystem()  
@@ -107,20 +106,26 @@ class OpenSimVicon:
 
 
     def load_references(self):
+        self.markerWeights = osim.SetMarkerWeights()
+        for i, label in enumerate(self.viconMarkerLabels):
+            weight = 1.0  # Default weight
+            markerWeight = osim.MarkerWeight()
+            markerWeight.setName(str(label))
+            markerWeight.setWeight(weight)
+            self.markerWeights.cloneAndAppend(markerWeight)
         # Create MarkersReference from vicon data only
-        self.marker_table = self.viconMarkerTable
-        self.mRefs = osim.MarkersReference(self.marker_table)
+        self.mRefs = osim.MarkersReference(self.viconMarkerTable, self.markerWeights)
         print(f"MarkersReference created from vicon markers")
 
 
-def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
+def main(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex):
     # Put log to level debug and show in terminal
     osim.Logger.setLevel(osim.Logger.Level_Info)
 
     model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
     viconIK = OpenSimVicon(model_path, model_name, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    viconIK.resultsDirectory = '../'+ trial_ID +'_ViconIKResults'
+    viconIK.resultsDirectory = 'ViconIKResults'
     viconIK.constraint_var = constraint_var
 
     # Correct ref frame
@@ -212,7 +217,7 @@ def main(constraint_var, subject_ID, trial_ID, subject_mass, subject_height, sub
     vicon_labels.append("vicon_error_max")
 
     # Add individual vicon error columns
-    for label in viconIK.viconLabels:
+    for label in viconIK.viconMarkerLabels:
         vicon_labels.append(f"{str(label)}_error")
 
     vicon_errors_storage.setColumnLabels(vicon_labels)

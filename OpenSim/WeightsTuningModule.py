@@ -70,12 +70,13 @@ def main():
     constraint_var = 1000
 
     # Ground truth IK run - Vicon
-    ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex) #TODO 
-    ground_truth_df = read_mot_file(ground_truth_ik_file)
+    ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex) #TODO 
+    #ground_truth_df = read_mot_file(ground_truth_ik_file)
+    # TODO: Downsample ground truth to match the frequency of the sensor fusion output! and align time frames using cross-correlation maybe
 
     # Optimization setup
-    study = optuna.create_study(direction='minimize')
-    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
+    #study = optuna.create_study(direction='minimize')
+    #study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
 
     # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
 
