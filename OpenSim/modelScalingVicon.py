@@ -22,10 +22,38 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         tag.find('mass').text = subject_mass  
         scaler = tag.find('ModelScaler')
         scaler.find('marker_file').text = static_trial_path  
-        scaler.find('output_model_file').text = output_model_file_scaling 
+        scaler.find('output_model_file').text = "../../" + output_model_file_scaling 
         scaler = tag.find('GenericModelMaker')
         scaler.find('model_file').text = "../../" + model_path
         scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/vicon_markers.xml"
+        scaler = tag.find('MarkerPlacer')
+        scaler.find('marker_file').text = static_trial_path
+        #scaler.find('output_motion_file').text = "scaling_motion.mot"
+        scaler.find('output_model_file').text = "Unassigned"
+        #scaler.find('output_marker_file').text = "../../../scaled_markers.xml"
+
+
+    new_file_path = 'recordings/subject'+ subject_ID +'/vicon_scaling_setup_'+ mvt_ID +'.xml'
+    tree.write(new_file_path, encoding='utf-8', xml_declaration=True)
+    return new_file_path
+
+def create_config_file_markers(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, mvt_ID, model_path):
+    """Create a configuration file for the Scale Tool."""
+    tree = ET.parse(config_template_path)
+    root = tree.getroot()
+    for tag in root.iter('ScaleTool'):
+        tag.find('height').text = subject_height  
+        tag.find('age').text = subject_age  
+        tag.find('notes').text = subject_ID
+        tag.find('sex').text = subject_sex
+        tag.find('mass').text = subject_mass  
+        scaler = tag.find('ModelScaler')
+        scaler.find('apply').text = "false"
+        scaler.find('marker_file').text = static_trial_path  
+        scaler.find('output_model_file').text = "Unassigned"
+        scaler = tag.find('GenericModelMaker')
+        scaler.find('model_file').text = "../../" + model_path
+        scaler.find('marker_set_file').text = "Unassigned"
         scaler = tag.find('MarkerPlacer')
         scaler.find('marker_file').text = static_trial_path
         #scaler.find('output_motion_file').text = "scaling_motion.mot"
@@ -75,7 +103,7 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     root_markers = tree_markers.getroot()
     for tag in root_markers.iter('Model'):
         markers = tag.find('MarkerSet')
-        marker_jointset = tag.find('JointSet')
+        #marker_jointset = tag.find('JointSet')
 
     # Write in scaling model
     tree = ET.parse(output_model_file_scaling.removeprefix("../../"))
@@ -83,35 +111,35 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     for tag in root.iter('Model'):
         tag.find('MarkerSet').clear()
         tag.find('MarkerSet').extend(markers)
-        scaled_jointset = tag.find('JointSet')
+        #scaled_jointset = tag.find('JointSet')
     #print("MarkerSet swaped!")
 
-    if scaled_jointset is not None and marker_jointset is not None:
-        #print("Both JointSet elements found.")
-        scaled_objects = scaled_jointset.find('objects')
-        marker_objects = marker_jointset.find('objects')
-        # Build a mapping from joint name to frames in marker_placed
-        marker_frames_map = {}
-        for marker_joint in marker_objects:
-            name = marker_joint.get('name')
-            #print("Checking marker joints for <frames>...in the joint: ", name)
-            frames = marker_joint.find('frames')
-            if name and frames is not None:
-                marker_frames_map[name] = frames
-                #print(f"Found frames for joint: {name}")
+    #if scaled_jointset is not None and marker_jointset is not None:
+    #    #print("Both JointSet elements found.")
+    #    scaled_objects = scaled_jointset.find('objects')
+    #    marker_objects = marker_jointset.find('objects')
+    #    # Build a mapping from joint name to frames in marker_placed
+    #    marker_frames_map = {}
+    #    for marker_joint in marker_objects:
+    #        name = marker_joint.get('name')
+    #        #print("Checking marker joints for <frames>...in the joint: ", name)
+    #        frames = marker_joint.find('frames')
+    #        if name and frames is not None:
+    #            marker_frames_map[name] = frames
+    #            #print(f"Found frames for joint: {name}")
 
-        # For each joint in scaled, swap frames if present in marker_placed
-        for scaled_joint in scaled_objects:
-            name = scaled_joint.get('name')
-            if name in marker_frames_map:
-                # Remove existing <frames> if present
-                for child in list(scaled_joint):
-                    if child.tag == 'frames':
-                        scaled_joint.remove(child)
-                # Deep copy and insert the marker's <frames>
-                marker_frames = marker_frames_map[name]
-                scaled_joint.append(ET.fromstring(ET.tostring(marker_frames)))
-                #print(f"Swapped frames for joint: {name}")
+    #    # For each joint in scaled, swap frames if present in marker_placed
+    #    for scaled_joint in scaled_objects:
+    #        name = scaled_joint.get('name')
+    #        if name in marker_frames_map:
+    #            # Remove existing <frames> if present
+    #            for child in list(scaled_joint):
+    #                if child.tag == 'frames':
+    #                    scaled_joint.remove(child)
+    #            # Deep copy and insert the marker's <frames>
+    #            marker_frames = marker_frames_map[name]
+    #            scaled_joint.append(ET.fromstring(ET.tostring(marker_frames)))
+    #            #print(f"Swapped frames for joint: {name}")
     
     tree.write(output_model_file, encoding='utf-8', xml_declaration=True)
 
@@ -137,7 +165,7 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
     print("Initial time of the static trial:", initial_time)
 
     # Create our own config file
-    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file_scaling, mvt_ID, model_path, initial_time)
+    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time)
     print("Configuration file created at:", config_path)
 
     # Create and configure the Scale Tool
@@ -152,21 +180,26 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
     # Run the Scale Tool
     run_scaling(scale_tool)
 
-    print("Creating mixed model...")
+    #print("Calling MarkerPlacer...")
+
+    #config_path_2 = create_config_file_markers(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path,  mvt_ID, output_model_file)
+
+    #scale_tool_2 = create_scale_tool(config_path_2)
+    #run_scaling(scale_tool_2)
 
     # Get the model with the markers placed
-    new_model = scale_tool.createModel()
+    #new_model = scale_tool_2.createModel()
     # Save the new model to a file
-    new_model.printToXML(output_model_file_markers)
+    #new_model.printToXML(output_model_file)
 
     # Mix both scaled and marker placed models into one
-    create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file)
+    #create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file)
 
     # Delete intermediate files
-    if os.path.exists(output_model_file_scaling.removeprefix("../../")):
-        os.remove(output_model_file_scaling.removeprefix("../../"))
-    if os.path.exists(output_model_file_markers):
-        os.remove(output_model_file_markers)
+    #if os.path.exists(output_model_file_scaling.removeprefix("../../")):
+    #    os.remove(output_model_file_scaling.removeprefix("../../"))
+    #if os.path.exists(output_model_file_markers):
+    #    os.remove(output_model_file_markers)
 
     return output_model_file
 
