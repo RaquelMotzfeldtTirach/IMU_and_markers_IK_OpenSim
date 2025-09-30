@@ -31,6 +31,17 @@ def read_mot_file(filepath):
 def compare_joint_angles(df1, df2):
     return df1 - df2
 
+def downsample(groundtruth_df, time_vector): #TODO: check that this is working
+    """Downsamples the ground truth DataFrame to match the time vector."""
+    downsampled_df = pd.DataFrame()
+    # for each time, find the closest time in groundtruth_df and copy the row
+    for t in time_vector:
+        closest_time = groundtruth_df.iloc[(groundtruth_df['time'] - t).abs().argsort()[:1]]
+        downsampled_df = pd.concat([downsampled_df, closest_time], ignore_index=True)
+    downsampled_df = downsampled_df.drop(columns=['time']).reset_index(drop=True)
+    downsampled_df.insert(0, 'time', time_vector)
+    return downsampled_df
+
 def objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
     # Define weight parameters to optimize
     webcam_weights = [trial.suggest_float(f'webcam_weight_{i}', 0.0, 10.0) for i in range(12)]  # Example: 12 webcam weights
@@ -46,6 +57,10 @@ def objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subj
     
     # Read latest output
     latest_ik_results_df = read_mot_file(output)
+
+    # Downsample ground truth to match the time vector of the latest IK results
+    time_vector = latest_ik_results_df['time'].values
+    ground_truth_df = downsample(ground_truth_df, time_vector)
 
     # Compare with ground truth
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
@@ -71,9 +86,8 @@ def main():
 
     # Ground truth IK run - Vicon
     ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex) #TODO 
-    #ground_truth_df = read_mot_file(ground_truth_ik_file)
-    # TODO: Downsample ground truth to match the frequency of the sensor fusion output! and align time frames using cross-correlation maybe
-
+    ground_truth_df = read_mot_file(ground_truth_ik_file)
+    
     # Optimization setup
     #study = optuna.create_study(direction='minimize')
     #study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
