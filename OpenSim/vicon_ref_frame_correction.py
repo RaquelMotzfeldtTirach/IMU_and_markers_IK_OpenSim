@@ -6,7 +6,8 @@ import math
 
 # For the vicon data, the correction is simpler
 # From the visualization in OpenSim it looks like:
-# The data needs to be rotated around the y axis by 90 degrees
+# The data needs to be rotated around the y axis by 90 degrees if the human faces the hvl robotics logo
+# Let's make something modular instead of hardcoding values
 # And maybe translated a bit, using pelvis markers maybe?
 
 def read_trc_file(filepath, columns_of_interest=None):
@@ -127,10 +128,12 @@ def main(subject_ID, mvt_ID):
     #print(vicon_df.head())
 
     # ROTATION: to match the orientation of the vicon data
-    rot_angle = -90
-    rot_mat = np.array([[np.cos(np.radians(rot_angle)), 0, np.sin(np.radians(rot_angle))],
-                        [0, 1, 0],
-                        [-np.sin(np.radians(rot_angle)), 0, np.cos(np.radians(rot_angle))]]) # rotation around y axis
+    target_vect = np.array([0, 0, 1]) # z axis
+    left_shoulder = np.array(vicon_df['LeftAA'][0]) # initial position of left shoulder
+    right_shoulder = np.array(vicon_df['RightAA'][0]) # initial position of right shoulder
+    source_vect = np.array(right_shoulder - left_shoulder) # from left to right shoulder
+    rot_mat = find_rotation_matrix(source_vect, target_vect)
+    #print("Rotation matrix:\n", rot_mat)
     
     # TRANSLATION: to match the shoulders
     torso_offset =  np.array([-100.7, 81.500000000000003, 0.0]) # in mm

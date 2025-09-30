@@ -27,9 +27,10 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         scaler.find('model_file').text = "../../" + model_path
         scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/vicon_markers.xml"
         scaler = tag.find('MarkerPlacer')
-        scaler.find('marker_file').text = static_trial_path  
-        #scaler.find('output_model_file').text = output_model_file # This fails for some reason, so we'll do it manually, later
-        scaler.find('time_range').text = str(initial_time) + " " + str(initial_time + 10.0) # first 10 seconds of static trial
+        scaler.find('marker_file').text = static_trial_path
+        #scaler.find('output_motion_file').text = "scaling_motion.mot"
+        scaler.find('output_model_file').text = "Unassigned"
+        #scaler.find('output_marker_file').text = "../../../scaled_markers.xml"
 
 
     new_file_path = 'recordings/subject'+ subject_ID +'/vicon_scaling_setup_'+ mvt_ID +'.xml'
@@ -74,6 +75,7 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     root_markers = tree_markers.getroot()
     for tag in root_markers.iter('Model'):
         markers = tag.find('MarkerSet')
+        marker_jointset = tag.find('JointSet')
 
     # Write in scaling model
     tree = ET.parse(output_model_file_scaling.removeprefix("../../"))
@@ -81,6 +83,35 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     for tag in root.iter('Model'):
         tag.find('MarkerSet').clear()
         tag.find('MarkerSet').extend(markers)
+        scaled_jointset = tag.find('JointSet')
+    #print("MarkerSet swaped!")
+
+    if scaled_jointset is not None and marker_jointset is not None:
+        #print("Both JointSet elements found.")
+        scaled_objects = scaled_jointset.find('objects')
+        marker_objects = marker_jointset.find('objects')
+        # Build a mapping from joint name to frames in marker_placed
+        marker_frames_map = {}
+        for marker_joint in marker_objects:
+            name = marker_joint.get('name')
+            #print("Checking marker joints for <frames>...in the joint: ", name)
+            frames = marker_joint.find('frames')
+            if name and frames is not None:
+                marker_frames_map[name] = frames
+                #print(f"Found frames for joint: {name}")
+
+        # For each joint in scaled, swap frames if present in marker_placed
+        for scaled_joint in scaled_objects:
+            name = scaled_joint.get('name')
+            if name in marker_frames_map:
+                # Remove existing <frames> if present
+                for child in list(scaled_joint):
+                    if child.tag == 'frames':
+                        scaled_joint.remove(child)
+                # Deep copy and insert the marker's <frames>
+                marker_frames = marker_frames_map[name]
+                scaled_joint.append(ET.fromstring(ET.tostring(marker_frames)))
+                #print(f"Swapped frames for joint: {name}")
     
     tree.write(output_model_file, encoding='utf-8', xml_declaration=True)
 
@@ -120,6 +151,8 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
 
     # Run the Scale Tool
     run_scaling(scale_tool)
+
+    print("Creating mixed model...")
 
     # Get the model with the markers placed
     new_model = scale_tool.createModel()
