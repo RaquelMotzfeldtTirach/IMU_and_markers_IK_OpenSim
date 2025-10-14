@@ -51,6 +51,9 @@ def read_trc_file(filepath, columns_of_interest=None):
             columns_of_interest = ['Time'] + columns_of_interest
         df = df[columns_of_interest]
     
+    #plot df for check
+    #print(df.head(6))
+    
     return df
 
 def find_rotation_matrix(source, target):
@@ -129,25 +132,24 @@ def main(subject_ID, mvt_ID):
 
     # ROTATION: to match the orientation of the vicon data
     target_vect = np.array([0, 0, 1]) # z axis
-    left_shoulder = np.array(vicon_df['LeftAA'][0]) # initial position of left shoulder
-    right_shoulder = np.array(vicon_df['RightAA'][0]) # initial position of right shoulder
-    source_vect = np.array(right_shoulder - left_shoulder) # from left to right shoulder
+    left_hip = np.array(vicon_df['LPSI'][0]) # initial position of left hip
+    right_hip = np.array(vicon_df['RPSI'][0]) # initial position of right hip
+    source_vect = np.array(right_hip - left_hip) # from left to right hip
     rot_mat = find_rotation_matrix(source_vect, target_vect)
     #print("Rotation matrix:\n", rot_mat)
     
-    # TRANSLATION: to match the shoulders
-    torso_offset =  np.array([-100.7, 81.500000000000003, 0.0]) # in mm
+    # TRANSLATION: to match the pelvis
     pelvis_offset = np.array([0.0, 940.0, 0.0]) # in mm
-    goal_middle_point_shoulders = np.array([-10.419676829770281, 414.80742266495135, 0.0]) + torso_offset + pelvis_offset # in mm
+    goal_middle_point_hips = np.array([-15.444693379914354, 433.34163698830593, 0.0]) + pelvis_offset # in mm
 
-    # So let's fit right aa and left aa
-    vicon_initial_right_aa = np.array(vicon_df['RightAA'][0]) 
-    vicon_initial_left_aa = np.array(vicon_df['LeftAA'][0])
+    # So let's fit LPSI and RPSI
+    vicon_initial_right_hip = np.array(vicon_df['RPSI'][0]) 
+    vicon_initial_left_hip = np.array(vicon_df['LPSI'][0])
 
     # middle point
-    vicon_initial_middle_point_shoulders = (vicon_initial_right_aa + vicon_initial_left_aa) / 2
+    vicon_initial_middle_point_hips = (vicon_initial_right_hip + vicon_initial_left_hip) / 2
 
-    translation = goal_middle_point_shoulders - vicon_initial_middle_point_shoulders
+    translation = goal_middle_point_hips - vicon_initial_middle_point_hips
     # apply rotation and translation to all markers
     translated_rotated_vicon_df = apply_transformation(vicon_df, rot_mat, translation)
     #print(translated1_rotated1_stereocamera_df.head())
