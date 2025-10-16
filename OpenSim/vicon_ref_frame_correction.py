@@ -140,7 +140,7 @@ def main(subject_ID, mvt_ID):
     
     # TRANSLATION: to match the pelvis
     pelvis_offset = np.array([0.0, 940.0, 0.0]) # in mm
-    goal_middle_point_hips = np.array([-15.444693379914354, 433.34163698830593, 0.0]) + pelvis_offset # in mm
+    goal_middle_point_hips = np.array([-15.444693379914354, 4.3334163698830593, 0.0]) + pelvis_offset # in mm
 
     # So let's fit LPSI and RPSI
     vicon_initial_right_hip = np.array(vicon_df['RPSI'][0]) 
@@ -162,5 +162,6 @@ if __name__ == "__main__":
     parser.add_argument('subject_ID', type=str, help='Subject ID')
     parser.add_argument('mvt_ID', type=str, help='Movement ID')
     args = parser.parse_args()
+
 
     main(args.subject_ID, args.mvt_ID)
