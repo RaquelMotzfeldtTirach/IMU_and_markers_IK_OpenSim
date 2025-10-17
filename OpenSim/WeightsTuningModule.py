@@ -5,6 +5,110 @@ import pandas as pd
 import optuna
 from SensorFusion_automatic import main as sensor_fusion
 from ViconIK import main as vicon_ik
+import matplotlib.pyplot as plt
+
+def time_correction(subject_ID, trial_ID):
+    """ Time synchronisation of the vicon data based on the "raw" imu data since they both are collected at 100Hz"""
+
+    # Read the mot file 
+    vicon_trc_path = f'recordings/subject{subject_ID}/vicon_{trial_ID}.trc'
+    header_vicon, columns_vicon, vicon_df = read_trc_file(vicon_trc_path)
+    # Read the imu data
+    imu_sto_path = f'recordings/subject{subject_ID}/imu_{trial_ID}/{trial_ID}_orientations_updatedTime.sto'
+    header_imu, columns_imu, imu_df = read_sto_file(imu_sto_path)
+    # First change the time vector to start at 0 and delete the Frame# column
+    vicon_df['Time'] = vicon_df['Time'] - vicon_df['Time'].iloc[0]
+    vicon_df = vicon_df.drop(columns=['Frame#'])
+    print(vicon_df.head())
+    print(imu_df.head())
+    # Now select some pairs of columns to compare
+    pairs = [
+        'torso_imu', 'C7';
+        'l_humerus_imu', ';
+    ]
+    # Then find the time lag be using cross-correlation between the vicon data and the imu data
+
+def read_sto_file(filepath):
+    """Reads a .sto file and returns the header, column labels, and data as a pandas DataFrame."""
+    header = []
+    data = []
+    columns = []
+    row = []
+    with open(filepath, 'r') as f:
+        in_header = True
+        for line in f:
+            if in_header:
+                header.append(line)
+                if line.strip().startswith('endheader'):
+                    in_header = False
+            elif not columns:
+                columns = line.strip().split('\t')
+            else:
+                if line.strip() == '':
+                    continue
+                # prefer splitting by tab, fallback to whitespace
+                if '\t' in line:
+                    tokens = line.strip().split('\t')
+                else:
+                    tokens = line.strip().split()
+                # first token is time
+                t = float(tokens[0])
+                row = [t]
+                # for each remaining token which is comma separated quaternion
+                for i, col in enumerate(columns[1:], start=1):
+                    if i >= len(tokens):
+                        # missing data
+                        q = [np.nan, np.nan, np.nan, np.nan]
+                    else:
+                        cell = tokens[i].strip()
+                        # tokens may already be like '0.2188,0.8209,-0.0937,0.5189'
+                        parts = [p for p in cell.split(',') if p != '']
+                        if len(parts) != 4:
+                            # try splitting by whitespace if comma not present
+                            parts = cell.split()
+                        try:
+                            q = [float(x) for x in parts]
+                        except:
+                            # fallback to NaNs
+                            q = [np.nan, np.nan, np.nan, np.nan]
+                    row.append(q)
+                data.append(row)
+                row = []
+    df = pd.DataFrame(data, columns=columns)
+    return header, columns, df
+
+def read_trc_file(filepath):
+    """Reads a .trc file and returns the header, column labels, and data as a pandas DataFrame."""
+    header = []
+    data = []
+    columns = []
+    with open(filepath, 'r') as f:
+        lines = f.readlines()
+        header = lines[:3]                 # first three lines as header
+        col_line_1 = lines[3]                      # line 4 (index 3)
+        col_line_2 = lines[4]                      # line 5 (index 4)
+        data_lines = lines[5:]                   # data starts from line 6
+
+        # Column labels
+        col_parts_1 = col_line_1.strip().split('\t')
+        col_parts_2 = col_line_2.strip().split('\t')
+
+        columns.append(col_parts_1[0])  # Frame#
+        columns.append(col_parts_1[1])  # Time
+        for i in range(len(col_parts_2)):
+            marker_name = col_parts_2[i]
+            columns.append(marker_name)
+
+        # Data 
+        for line in data_lines:
+            # slit by tab
+            split_line = line.strip().split('\t')
+            data.append([float(x) for x in split_line])
+
+        df = pd.DataFrame(data, columns=columns)
+
+    return header, columns, df
+
 
 def read_mot_file(filepath):
     """Reads a .mot file and returns the header, column labels, and data as a pandas DataFrame."""
@@ -84,10 +188,42 @@ def main():
 
     constraint_var = 1000
 
+    ## THIS IS TO TEST THE SETUP BEFORE WEIGHT TUNING
+
+    # Sensor fusion result with default weights
+    webcam_weights = [1.0] * 12
+    orientation_weights = [1.0] * 8
+    stereocamera_weights = [1.0] * 15
+    #output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+    # Read the output
+    #latest_ik_results_df = read_mot_file(output)
+
+    # Time synchronise the vicon data
+    time_correction(subject_ID, trial_ID)
+
     # Ground truth IK run - Vicon
-    ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex) #TODO 
-    ground_truth_df = read_mot_file(ground_truth_ik_file)
-    
+    #ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex) 
+    #ground_truth_df = read_mot_file(ground_truth_ik_file)
+
+    # Downsample ground truth to match the time vector of the latest IK results
+    #time_vector = latest_ik_results_df['time'].values
+    #ground_truth_df = downsample(ground_truth_df, time_vector)
+
+    # Compare with ground truth
+    #error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
+    # For each joints plot the error over the timestamps
+    #plt.figure()
+    #for col in error_df.columns:
+    #    if col != 'time':
+    #        plt.plot(error_df['time'], error_df[col], label=col)
+    #plt.xlabel('Time (s)')
+    #plt.ylabel('Joint Angle Error (degrees)')
+    #plt.title('Joint Angle Errors with Default Weights')
+    #plt.legend()
+
+
+
+
     # Optimization setup
     #study = optuna.create_study(direction='minimize')
     #study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
