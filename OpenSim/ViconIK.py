@@ -10,13 +10,6 @@ import time
 from modelScalingVicon import main as model_scaling_vicon
 from vicon_ref_frame_correction import main as correct_vicon_ref_frame
 
-# TODO: 
-# - Change marker xml file for vicon markers
-# - Make scaling script for Vicon data
-# - Make scaling template xml for vicon data
-# - Add hand markers for vicon
-# - Do time synchronization and downsampling in the weights tuning module!
-
 class OpenSimVicon:
     def __init__(self, model_path, model_name, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
         self.model_path = model_path
