@@ -369,11 +369,19 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
             for index, row in vicon_df.iterrows():
                 f.write('\t'.join([f'{val:.6f}' for val in row.values]) + '\n')
     else:
-        print("Time correction not applied.")
-
-
-
-    
+        input_lag = input("Do you want to propose another lag value? (value or no)")
+        if input_lag != 'no':
+            time_shift = - input_lag / 100.0  # assuming 100Hz
+            vicon_df['Time'] = vicon_df['Time'] + time_shift
+            corrected_vicon_trc_path = f'recordings/subject{subject_ID}/vicon_{trial_ID}.trc'
+            with open(corrected_vicon_trc_path, 'w') as f:
+                for line in header_vicon:
+                    f.write(line)
+                # write data
+                for index, row in vicon_df.iterrows():
+                    f.write('\t'.join([f'{val:.6f}' for val in row.values]) + '\n')
+        else: 
+            print("Time correction not applied.")
 
 def read_sto_file(filepath):
     """Reads a .sto file and returns the header, column labels, and data as a pandas DataFrame."""
@@ -502,13 +510,13 @@ def downsample(groundtruth_df, time_vector): #TODO: check that this is working
 
 def objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
     # Define weight parameters to optimize
-    webcam_weights = [trial.suggest_float(f'webcam_weight_{i}', 0.0, 10.0) for i in range(12)]  # Example: 12 webcam weights
-    orientation_weights = [trial.suggest_float(f'orientation_weight_{i}', 0.0, 10.0) for i in range(8)]  # Example: 8 orientation weights
-    stereocamera_weights = [trial.suggest_float(f'stereocamera_weight_{i}', 0.0, 10.0) for i in range(15)]  # Example: 15 stereocamera weights
+    webcam_weights = [trial.suggest_int(f'webcam_weight_{i}', 0, 10) for i in range(12)]  # Example: 12 webcam weights
+    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
+    stereocamera_weights = [trial.suggest_int(f'stereocamera_weight_{i}', 0, 10) for i in range(15)]  # Example: 15 stereocamera weights
 
     # Count weights that are non null
-    non_null_weights = sum(1 for w in orientation_weights if w > 0)
-    non_null_weights_ratio = 1 # TODO: adjust to the scale of the errors
+    #non_null_weights = sum(1 for w in orientation_weights if w > 0)
+    #non_null_weights_ratio = 1 # TODO: adjust to the scale of the errors
 
     # Run IK with updated weights
     output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
@@ -523,7 +531,8 @@ def objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subj
     # Compare with ground truth
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
-    return np.sum(error_df.abs().values) + non_null_weights * non_null_weights_ratio  # Example: minimize the sum of absolute errors and minimise the number of IMUs
+
+    return np.sum(error_df.abs().values)   # Example: minimize the sum of absolute errors 
 
 
 def main():
@@ -548,14 +557,24 @@ def main():
     webcam_weights = [1.0] * 12
     orientation_weights = [1.0] * 8
     stereocamera_weights = [1.0] * 15
+
+    # results from first optuna optimization (only error minizimation and 100 trials) - finger_nose trial
+    #webcam_weights = [5, 9, 6, 2, 9, 7, 5, 5, 1, 4, 4, 8]
+    #orientation_weights = [2, 3, 7, 5, 8, 0, 2, 9]
+    #stereocamera_weights = [7, 5, 0, 6, 1, 8, 7, 3, 3, 9, 0, 1, 0, 6, 7]
+    # results from first optuna optimization (only error minizimation and 100 trials) - shoulder_abd_add
+    webcam_weights = [0, 5, 0, 0, 2, 4, 10, 5, 8, 5, 6, 5]
+    orientation_weights = [9, 4, 9, 3, 4, 6, 1, 2]
+    stereocamera_weights = [4, 7, 1, 2, 0, 6, 5, 5, 6, 10, 3, 10, 0, 0, 6]
+
     output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
     # Read the output
     latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
 
     # Time synchronise the vicon data
     vicon_df, vicon_ik_norm, imu_df, header_vicon, columns_vicon = time_correction(subject_ID, trial_ID)
-    #best_lag = find_lag(vicon_ik_norm, imu_df)
-    best_lag = 263  # assuming no lag for now
+    best_lag = find_lag(vicon_ik_norm, imu_df)
+    #best_lag = 215 #finger-nose
     apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
     
 
@@ -569,26 +588,97 @@ def main():
     ground_truth_df = downsample(ground_truth_df, time_vector)
 
     # Compare with ground truth
-    error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
+    error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df)
     # delete the column where error is 0
     error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
-    # For each joints plot the error over the timestamps
-    plt.figure()
-    for col in error_df.columns:
-        if col != 'time':
-            plt.plot(time_vector, error_df[col], label=col)
+    error_df['time'] = time_vector
+    # For each joints plot the error over the timestamps in a different plot 
+    plt.figure(figsize=(12, 10))    
+    plt.subplot(4, 2, 1)
+    plt.plot(error_df['time'], error_df['arm_flex_r'])
     plt.xlabel('Time (s)')
-    plt.ylabel('Joint Angle Error (degrees)')
-    plt.title('Joint Angle Errors with Default Weights')
-    plt.legend()
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Right Shoulder Flexion Error')
+    plt.subplot(4, 2, 2)
+    plt.plot(error_df['time'], error_df['arm_flex_l'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Left Shoulder Flexion Error')
+    plt.subplot(4, 2, 3)
+    plt.plot(error_df['time'], error_df['arm_add_r'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Right Shoulder Adduction Error')
+    plt.subplot(4, 2, 4)
+    plt.plot(error_df['time'], error_df['arm_add_l'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Left Shoulder Adduction Error')
+    plt.subplot(4, 2, 5)
+    plt.plot(error_df['time'], error_df['arm_rot_r'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Right Shoulder Rotation Error')
+    plt.subplot(4, 2, 6)
+    plt.plot(error_df['time'], error_df['arm_rot_l'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Left Shoulder Rotation Error')
+    plt.subplot(4, 2, 7)
+    plt.plot(error_df['time'], error_df['elbow_flex_r'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Right Elbow Flexion Error')
+    plt.subplot(4, 2, 8)
+    plt.plot(error_df['time'], error_df['elbow_flex_l'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error between vicon and fusion results')
+    plt.title('Left Elbow Flexion Error')
+    plt.tight_layout()
     plt.show()
 
+    # Evaluation metrics 
+    # Range of Motion and difference in RoM between vicon and sensor fusion
+    rom_vicon = ground_truth_df.max() - ground_truth_df.min()
+    rom_fusion = latest_ik_results_df.max() - latest_ik_results_df.min()
+    rom_error = rom_vicon - rom_fusion
+    plt.figure(figsize=(10, 6))
+    plt.bar(rom_error.index, rom_error.values)
+    plt.xlabel('Joint Angles')
+    plt.ylabel('Range of Motion Error (degrees)')
+    plt.title('Range of Motion Error between Vicon and Sensor Fusion Results')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.show()
 
+    # RMSE (Root Mean Square Error) for each joint angle
+    rmse = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
+    plt.figure(figsize=(10, 6))
+    plt.bar(rmse.index, rmse.values)
+    plt.xlabel('Joint Angles')
+    plt.ylabel('RMSE (degrees)')
+    plt.title('Root Mean Square Error between Vicon and Sensor Fusion Results')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.show()
 
+    # MAD (Mean Absolute Deviation) for each joint angle
+    mad = 1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time']).abs())
+    plt.figure(figsize=(10, 6))
+    plt.bar(mad.index, mad.values)
+    plt.xlabel('Joint Angles')
+    plt.ylabel('MAD (degrees)')
+    plt.title('Mean Absolute Deviation between Vicon and Sensor Fusion Results')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.show()
 
     # Optimization setup
-    #study = optuna.create_study(direction='minimize')
-    #study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
+    study = optuna.create_study(direction='minimize')
+    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
+
+    print("Best trial:")
+    print(study.best_params)
 
     # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
 
