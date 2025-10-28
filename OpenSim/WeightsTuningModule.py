@@ -288,14 +288,14 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     vicon_plot = vicon_plot * (-1) + 1
     # Plot with subplots for left humerus, right humerus, left radius, right radius, left hand, right hand, torso
     plt.figure(figsize=(12, 10))    
-    plt.subplot(4, 2, 1)
+    plt.subplot(3, 2, 1)
     plt.plot(imu_df['time'], imu_plot, label='IMU Humerus L X', alpha=0.7)
     plt.plot(vicon_df['Time'], vicon_plot, label='Vicon Humerus L X', alpha=0.7)
     plt.xlabel('Time (s)')
     plt.ylabel('Normalized Value')
     plt.title('Left Humerus X Component')
     plt.legend()
-    plt.subplot(4, 2, 2)
+    plt.subplot(3, 2, 2)
     imu_plot = [q[1] for q in humerus_r_imu_quat]
     imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
     vicon_plot = vicon_df['X14'].values
@@ -306,7 +306,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.ylabel('Normalized Value')
     plt.title('Right Humerus X Component')
     plt.legend()
-    plt.subplot(4, 2, 3)
+    plt.subplot(3, 2, 3)
     imu_plot = [q[1] for q in radius_l_imu_quat]
     imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
     vicon_plot = vicon_df['X9'].values
@@ -318,7 +318,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.ylabel('Normalized Value')
     plt.title('Left Radius X Component')
     plt.legend()
-    plt.subplot(4, 2, 4)
+    plt.subplot(3, 2, 4)
     imu_plot = [q[1] for q in radius_r_imu_quat]
     imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
     vicon_plot = vicon_df['X16'].values
@@ -329,7 +329,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.ylabel('Normalized Value')
     plt.title('Right Radius X Component')
     plt.legend()
-    plt.subplot(4, 2, 5)
+    plt.subplot(3, 2, 5)
     imu_plot = [q[1] for q in hand_l_imu_quat]
     imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
     vicon_plot = vicon_df['X12'].values
@@ -341,7 +341,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.ylabel('Normalized Value')  
     plt.title('Left Hand X Component')
     plt.legend()
-    plt.subplot(4, 2, 6)    
+    plt.subplot(3, 2, 6)    
     imu_plot = [q[1] for q in hand_r_imu_quat]
     imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
     vicon_plot = vicon_df['X19'].values
@@ -352,7 +352,6 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.ylabel('Normalized Value')
     plt.title('Right Hand X Component')
     plt.legend()
-    plt.subplot(4, 2, 7)
     plt.tight_layout()
     plt.show()
 
@@ -371,15 +370,8 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     else:
         input_lag = input("Do you want to propose another lag value? (value or no)")
         if input_lag != 'no':
-            time_shift = - input_lag / 100.0  # assuming 100Hz
-            vicon_df['Time'] = vicon_df['Time'] + time_shift
-            corrected_vicon_trc_path = f'recordings/subject{subject_ID}/vicon_{trial_ID}.trc'
-            with open(corrected_vicon_trc_path, 'w') as f:
-                for line in header_vicon:
-                    f.write(line)
-                # write data
-                for index, row in vicon_df.iterrows():
-                    f.write('\t'.join([f'{val:.6f}' for val in row.values]) + '\n')
+            input_lag = int(input_lag)
+            apply_lag_correction(vicon_df, input_lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
         else: 
             print("Time correction not applied.")
 
@@ -563,9 +555,14 @@ def main():
     #orientation_weights = [2, 3, 7, 5, 8, 0, 2, 9]
     #stereocamera_weights = [7, 5, 0, 6, 1, 8, 7, 3, 3, 9, 0, 1, 0, 6, 7]
     # results from first optuna optimization (only error minizimation and 100 trials) - shoulder_abd_add
-    webcam_weights = [0, 5, 0, 0, 2, 4, 10, 5, 8, 5, 6, 5]
-    orientation_weights = [9, 4, 9, 3, 4, 6, 1, 2]
-    stereocamera_weights = [4, 7, 1, 2, 0, 6, 5, 5, 6, 10, 3, 10, 0, 0, 6]
+    #webcam_weights = [0, 5, 0, 0, 2, 4, 10, 5, 8, 5, 6, 5]
+    #orientation_weights = [9, 4, 9, 3, 4, 6, 1, 2]
+    #stereocamera_weights = [4, 7, 1, 2, 0, 6, 5, 5, 6, 10, 3, 10, 0, 0, 6]
+
+    #results on finger_nose after 1000 trials 
+    #webcam_weights = [6, 7, 10, 0, 0, 7, 4, 0, 9, 6, 7, 0]
+    #orientation_weights = [8, 10, 9, 2, 8, 0, 1, 4]
+    #stereocamera_weights = [2, 5, 5, 10, 0, 1, 7, 1, 1, 3, 9, 10, 3, 8, 3]
 
     output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
     # Read the output
@@ -675,10 +672,24 @@ def main():
 
     # Optimization setup
     study = optuna.create_study(direction='minimize')
-    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=100)
+    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=1000)
 
     print("Best trial:")
     print(study.best_params)
+
+    # Save best trial data in a file 
+    file_name = "optuna_results_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
+    with open(file_name, 'w') as f:
+        f.write("Best trial parameters:\n")
+        for key, value in study.best_params.items():
+            f.write(f"{key}: {value}\n")
+        f.write("\nBest trial value: " + str(study.best_value) + "\n")
+        f.write("\nNumber of trials: " + str(len(study.trials)) + "\n")
+        f.write("\nAll trials:\n")
+        for trial in study.trials:
+            f.write(f"Trial {trial.number}: {trial.params} -> Value: {trial.value}\n")
+    print(f"Results saved to {file_name}")
+
 
     # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
 
