@@ -28,6 +28,7 @@ def create_config_file(config_template_path, subject_ID, subject_mass, subject_h
         scaler.find('marker_set_file').text = "../../OpenSim/Models/Rajagopal/vicon_markers.xml"
         scaler = tag.find('MarkerPlacer')
         scaler.find('marker_file').text = static_trial_path
+        scaler.find('time_range').text = str(initial_time) + " " + str(initial_time + 10.0) # first 10 seconds of static trial
         #scaler.find('output_motion_file').text = "scaling_motion.mot"
         scaler.find('output_model_file').text = "Unassigned"
         #scaler.find('output_marker_file').text = "../../../scaled_markers.xml"
@@ -179,27 +180,6 @@ def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_
 
     # Run the Scale Tool
     run_scaling(scale_tool)
-
-    #print("Calling MarkerPlacer...")
-
-    #config_path_2 = create_config_file_markers(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path,  mvt_ID, output_model_file)
-
-    #scale_tool_2 = create_scale_tool(config_path_2)
-    #run_scaling(scale_tool_2)
-
-    # Get the model with the markers placed
-    #new_model = scale_tool_2.createModel()
-    # Save the new model to a file
-    #new_model.printToXML(output_model_file)
-
-    # Mix both scaled and marker placed models into one
-    #create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file)
-
-    # Delete intermediate files
-    #if os.path.exists(output_model_file_scaling.removeprefix("../../")):
-    #    os.remove(output_model_file_scaling.removeprefix("../../"))
-    #if os.path.exists(output_model_file_markers):
-    #    os.remove(output_model_file_markers)
 
     return output_model_file
 

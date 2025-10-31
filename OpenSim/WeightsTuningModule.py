@@ -94,8 +94,8 @@ def time_correction(subject_ID, trial_ID):
     vicon_df['Time'] = vicon_df['Time'] - vicon_df['Time'].iloc[0] + imu_df['time'].iloc[0]
     vicon_df_norm = vicon_df.drop(columns=['Frame#'])
 
-    print(imu_df.head())
-    print(vicon_df_norm.head())
+    #print(imu_df.head())
+    #print(vicon_df_norm.head())
     # Normalization, but not the time column # ToDo: look into standardisation instead
     #vicon_df = standardize_df(vicon_df, exclude_cols=['Time'])
     vicon_df_norm = (vicon_df_norm - vicon_df_norm.min()) / (vicon_df_norm.max() - vicon_df_norm.min())
@@ -104,13 +104,15 @@ def time_correction(subject_ID, trial_ID):
     imu_df = normalize_imu_df_minmax(imu_df, exclude_cols=['time'])
 
     # For debugging, print the first few rows
-    print(vicon_df_norm.head())
-    print(imu_df.head())
+    #print(vicon_df_norm.head())
+    #print(imu_df.head())
     return vicon_df, vicon_df_norm, imu_df, header_vicon, columns_vicon
-    
+
 
 def find_lag(vicon_df, imu_df):
-    """ Find the time lag between the vicon data and the imu data based on cross-correlation of selected segments"""
+    """ Find the time lag between the vicon data and the imu data based on cross-correlation of selected segments
+        Robust to NaNs in either IMU quaternions or Vicon marker components.
+    """
     # Now select some pairs of columns to compare
     humerus_r_imu_quat = imu_df['humerus_r_imu'].tolist()
     humerus_l_imu_quat = imu_df['humerus_l_imu'].tolist()
@@ -124,6 +126,7 @@ def find_lag(vicon_df, imu_df):
     radius_l_vicon = vicon_df[['X9', 'Y9', 'Z9']].values.tolist()
     hand_r_vicon = vicon_df[['X19', 'Y19', 'Z19']].values.tolist()
     hand_l_vicon = vicon_df[['X12', 'Y12', 'Z12']].values.tolist()
+
 
     # Then find the time lag be using cross-correlation between the vicon data and the imu data
     nb_lags = len(vicon_df)
@@ -141,7 +144,8 @@ def find_lag(vicon_df, imu_df):
     best_lag_hand_r = 0
     best_corr_lag_hand_r = 0
     lag_coor = [[], [], [], [], [], []]  # to store lag correlations for each of the 6 segments
-    # ToDo: are we sure this cross-correlation is the same for vectors and for time series, look into the pearson correlation coefficient instead?
+
+    print("Calculating cross-correlations for lag detection...")
     
     for lag in lags:
         corr = 0
@@ -153,8 +157,11 @@ def find_lag(vicon_df, imu_df):
             q = humerus_l_imu_quat[i] 
             q = (-np.array(q)).tolist() + [1, 1, 1, 1]
             v = humerus_l_vicon[j]
-            # Simple dot product as correlation measure
-            corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
+            if np.isnan(q).any() or np.isnan(v).any():
+                corr += 0
+            else:
+                # Simple dot product as correlation measure
+                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
         lag_coor[0].append(corr)
         if corr > best_corr_lag_hum_l:
             best_corr_lag_hum_l = corr
@@ -167,8 +174,11 @@ def find_lag(vicon_df, imu_df):
             # Convert quaternion to vector (just use the vector part)
             q = humerus_r_imu_quat[i]
             v = humerus_r_vicon[j]
-            # Simple dot product as correlation measure
-            corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
+            if np.isnan(q).any() or np.isnan(v).any():
+                corr += 0
+            else:  
+                # Simple dot product as correlation measure
+                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
         lag_coor[1].append(corr)
         if corr > best_corr_lag_hum_r:
             best_corr_lag_hum_r = corr
@@ -182,8 +192,11 @@ def find_lag(vicon_df, imu_df):
             q = radius_l_imu_quat[i]
             q = (-np.array(q)).tolist() + [1, 1, 1, 1]
             v = radius_l_vicon[j]
-            # Simple dot product as correlation measure
-            corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
+            if np.isnan(q).any() or np.isnan(v).any():
+                corr += 0
+            else:
+                # Simple dot product as correlation measure
+                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
         lag_coor[2].append(corr)
         if corr > best_corr_lag_rad_l:
             best_corr_lag_rad_l = corr
@@ -196,8 +209,11 @@ def find_lag(vicon_df, imu_df):
             # Convert quaternion to vector (just use the vector part)
             q = radius_r_imu_quat[i]
             v = radius_r_vicon[j]
-            # Simple dot product as correlation measure
-            corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
+            if np.isnan(q).any() or np.isnan(v).any():
+                corr += 0
+            else:
+               # Simple dot product as correlation measure
+                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
         lag_coor[3].append(corr)
         if corr > best_corr_lag_rad_r:
             best_corr_lag_rad_r = corr
@@ -211,8 +227,11 @@ def find_lag(vicon_df, imu_df):
             q = hand_l_imu_quat[i] 
             q = (-np.array(q)).tolist() + [1, 1, 1, 1]
             v = hand_l_vicon[j]
-            # Simple dot product as correlation measure
-            corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
+            if np.isnan(q).any() or np.isnan(v).any():
+                corr += 0
+            else:
+                # Simple dot product as correlation measure
+                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
         lag_coor[4].append(corr)
         if corr > best_corr_lag_hand_l:
             best_corr_lag_hand_l = corr
@@ -225,8 +244,11 @@ def find_lag(vicon_df, imu_df):
             # Convert quaternion to vector (just use the vector part)
             q = hand_r_imu_quat[i]
             v = hand_r_vicon[j]
-            # Simple dot product as correlation measure
-            corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
+            if np.isnan(q).any() or np.isnan(v).any():
+                corr += 0
+            else:
+                # Simple dot product as correlation measure
+                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
         lag_coor[5].append(corr)
         if corr > best_corr_lag_hand_r:
             best_corr_lag_hand_r = corr
@@ -280,12 +302,33 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     radius_l_imu_quat = imu_df['radius_l_imu'].tolist()
     hand_r_imu_quat = imu_df['hand_r_imu'].tolist()
     hand_l_imu_quat = imu_df['hand_l_imu'].tolist()
+
+    # helper: nan-safe normalization to [0,1]; preserves NaNs and handles constant arrays
+    def safe_normalize(arr, invert=False):
+        a = np.asarray(arr, dtype=float)
+        if a.size == 0:
+            return a
+        # if all NaN, return array of NaNs (matplotlib will skip)
+        if np.isnan(a).all():
+            return a
+        amin = np.nanmin(a)
+        amax = np.nanmax(a)
+        if np.isfinite(amin) and np.isfinite(amax) and (amax - amin) > 0:
+            scaled = (a - amin) / (amax - amin)
+        else:
+            # constant array (or degenerate) -> map finite values to 0, keep NaNs
+            scaled = a - amin
+            scaled[~np.isfinite(scaled)] = np.nan
+            scaled[~np.isnan(scaled)] = 0.0
+        if invert:
+            scaled = scaled * (-1) + 1
+        return scaled
+
     # Plot to verify, normalized for better visualisation
-    imu_plot = [q[1] for q in humerus_l_imu_quat]
-    imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
-    vicon_plot = vicon_df['X7'].values
-    vicon_plot = (vicon_plot - np.min(vicon_plot)) / (np.max(vicon_plot) - np.min(vicon_plot))
-    vicon_plot = vicon_plot * (-1) + 1
+    imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in humerus_l_imu_quat ]
+    imu_plot = safe_normalize(imu_plot)
+    vicon_plot = safe_normalize(vicon_df['X7'].values, invert=True)
+
     # Plot with subplots for left humerus, right humerus, left radius, right radius, left hand, right hand, torso
     plt.figure(figsize=(12, 10))    
     plt.subplot(3, 2, 1)
@@ -295,57 +338,55 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.ylabel('Normalized Value')
     plt.title('Left Humerus X Component')
     plt.legend()
+
     plt.subplot(3, 2, 2)
-    imu_plot = [q[1] for q in humerus_r_imu_quat]
-    imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
-    vicon_plot = vicon_df['X14'].values
-    vicon_plot = (vicon_plot - np.min(vicon_plot)) / (np.max(vicon_plot) - np.min(vicon_plot))
+    imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in humerus_r_imu_quat ]
+    imu_plot = safe_normalize(imu_plot)
+    vicon_plot = safe_normalize(vicon_df['X14'].values)
     plt.plot(imu_df['time'], imu_plot, label='IMU Humerus R X', alpha=0.7)
     plt.plot(vicon_df['Time'], vicon_plot, label='Vicon Humerus R X', alpha=0.7)
     plt.xlabel('Time (s)')
     plt.ylabel('Normalized Value')
     plt.title('Right Humerus X Component')
     plt.legend()
+
     plt.subplot(3, 2, 3)
-    imu_plot = [q[1] for q in radius_l_imu_quat]
-    imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
-    vicon_plot = vicon_df['X9'].values
-    vicon_plot = (vicon_plot - np.min(vicon_plot)) / (np.max(vicon_plot) - np.min(vicon_plot))
-    vicon_plot = vicon_plot * (-1) + 1
+    imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in radius_l_imu_quat ]
+    imu_plot = safe_normalize(imu_plot)
+    vicon_plot = safe_normalize(vicon_df['X9'].values, invert=True)
     plt.plot(imu_df['time'], imu_plot, label='IMU Radius L X', alpha=0.7)
     plt.plot(vicon_df['Time'], vicon_plot, label='Vicon Radius L X', alpha=0.7)
     plt.xlabel('Time (s)')
     plt.ylabel('Normalized Value')
     plt.title('Left Radius X Component')
     plt.legend()
+
     plt.subplot(3, 2, 4)
-    imu_plot = [q[1] for q in radius_r_imu_quat]
-    imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
-    vicon_plot = vicon_df['X16'].values
-    vicon_plot = (vicon_plot - np.min(vicon_plot)) / (np.max(vicon_plot) - np.min(vicon_plot))
+    imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in radius_r_imu_quat ]
+    imu_plot = safe_normalize(imu_plot)
+    vicon_plot = safe_normalize(vicon_df['X16'].values)
     plt.plot(imu_df['time'], imu_plot, label='IMU Radius R X', alpha=0.7)
     plt.plot(vicon_df['Time'], vicon_plot, label='Vicon Radius R X', alpha=0.7)
     plt.xlabel('Time (s)')
     plt.ylabel('Normalized Value')
     plt.title('Right Radius X Component')
     plt.legend()
+
     plt.subplot(3, 2, 5)
-    imu_plot = [q[1] for q in hand_l_imu_quat]
-    imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
-    vicon_plot = vicon_df['X12'].values
-    vicon_plot = (vicon_plot - np.min(vicon_plot)) / (np.max(vicon_plot) - np.min(vicon_plot))
-    vicon_plot = vicon_plot * (-1) + 1
+    imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in hand_l_imu_quat ]
+    imu_plot = safe_normalize(imu_plot)
+    vicon_plot = safe_normalize(vicon_df['X12'].values, invert=True)
     plt.plot(imu_df['time'], imu_plot, label='IMU Hand L X', alpha=0.7)
     plt.plot(vicon_df['Time'], vicon_plot, label='Vicon Hand L X', alpha=0.7)
     plt.xlabel('Time (s)')
     plt.ylabel('Normalized Value')  
     plt.title('Left Hand X Component')
     plt.legend()
+
     plt.subplot(3, 2, 6)    
-    imu_plot = [q[1] for q in hand_r_imu_quat]
-    imu_plot = (imu_plot - np.min(imu_plot)) / (np.max(imu_plot) - np.min(imu_plot))
-    vicon_plot = vicon_df['X19'].values
-    vicon_plot = (vicon_plot - np.min(vicon_plot)) / (np.max(vicon_plot) - np.min(vicon_plot))
+    imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in hand_r_imu_quat ]
+    imu_plot = safe_normalize(imu_plot)
+    vicon_plot = safe_normalize(vicon_df['X19'].values)
     plt.plot(imu_df['time'], imu_plot, label='IMU Hand R X', alpha=0.7)
     plt.plot(vicon_df['Time'], vicon_plot, label='Vicon Hand R X', alpha=0.7)
     plt.xlabel('Time (s)')
@@ -368,6 +409,8 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
             for index, row in vicon_df.iterrows():
                 f.write('\t'.join([f'{val:.6f}' for val in row.values]) + '\n')
     else:
+        # Undo previous lag correction
+        vicon_df['Time'] = vicon_df['Time'] - time_shift
         input_lag = input("Do you want to propose another lag value? (value or no)")
         if input_lag != 'no':
             input_lag = int(input_lag)
@@ -570,8 +613,21 @@ def main():
 
     # Time synchronise the vicon data
     vicon_df, vicon_ik_norm, imu_df, header_vicon, columns_vicon = time_correction(subject_ID, trial_ID)
-    best_lag = find_lag(vicon_ik_norm, imu_df)
-    #best_lag = 215 #finger-nose
+    # This is for subject 34
+    if trial_ID == 'clapping':
+        best_lag = 262
+    elif trial_ID == 'finger_nose':
+        best_lag = 215
+    elif trial_ID == 'shoulder_abd_add':
+        best_lag = 75
+    elif trial_ID == 'elbow_flex_ext':
+        best_lag = 244
+    elif trial_ID == 'elbow_sub_pro':
+        best_lag = 215
+    elif trial_ID == 'wrist_flex_ext':
+        best_lag = 290
+    else: 
+        best_lag = find_lag(vicon_ik_norm, imu_df)
     apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
     
 
