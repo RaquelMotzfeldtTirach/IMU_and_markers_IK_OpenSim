@@ -646,7 +646,7 @@ def main():
     error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
     error_df['time'] = time_vector
     # For each joints plot the error over the timestamps in a different plot 
-    plt.figure(figsize=(12, 10))    
+    ''' plt.figure(figsize=(12, 10))    
     plt.subplot(4, 2, 1)
     plt.plot(error_df['time'], error_df['arm_flex_r'])
     plt.xlabel('Time (s)')
@@ -689,6 +689,12 @@ def main():
     plt.title('Left Elbow Flexion Error')
     plt.tight_layout()
     plt.show()
+    '''
+    # Make a folder for the analytics 
+    results_folder = f'analytics/subject_{subject_ID}_trial_{trial_ID}'
+    if not os.path.exists(results_folder):
+        os.makedirs(results_folder)
+    
 
     # Evaluation metrics 
     # Range of Motion and difference in RoM between vicon and sensor fusion
@@ -702,7 +708,7 @@ def main():
     plt.title('Range of Motion Error between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(results_folder + '/rom_error_default_weights.png')
 
     # RMSE (Root Mean Square Error) for each joint angle
     rmse = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
@@ -713,7 +719,7 @@ def main():
     plt.title('Root Mean Square Error between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(results_folder + '/rmse_default_weights.png')
 
     # MAD (Mean Absolute Deviation) for each joint angle
     mad = 1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time']).abs())
@@ -724,30 +730,78 @@ def main():
     plt.title('Mean Absolute Deviation between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(results_folder + '/mad_default_weights.png')
 
     # Optimization setup
-    study = optuna.create_study(direction='minimize')
-    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=1000)
-
-    print("Best trial:")
-    print(study.best_params)
+    study_name = "weights_tuning_study_" + subject_ID + "_" + trial_ID
+    study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True)
+    # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
+    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=10000)
 
     # Save best trial data in a file 
     file_name = "optuna_results_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
+    file_name = os.path.join(results_folder, file_name)
     with open(file_name, 'w') as f:
         f.write("Best trial parameters:\n")
         for key, value in study.best_params.items():
             f.write(f"{key}: {value}\n")
         f.write("\nBest trial value: " + str(study.best_value) + "\n")
         f.write("\nNumber of trials: " + str(len(study.trials)) + "\n")
-        f.write("\nAll trials:\n")
-        for trial in study.trials:
-            f.write(f"Trial {trial.number}: {trial.params} -> Value: {trial.value}\n")
     print(f"Results saved to {file_name}")
 
+    # Run sensor fusion with best weights
+    best_params = study.best_params
+    webcam_weights = [best_params[f'webcam_weight_{i}'] for i in range(12)]
+    orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
+    stereocamera_weights = [best_params[f'stereocamera_weight_{i}'] for i in range(15)]
 
-    # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
+    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+    # Read the output
+    output_df = pd.DataFrame(output)
+    output_df.to_csv(results_folder + '/sensor_fusion_best_params_output.csv', index=False)
+
+    # Compare with ground truth
+    error_df = compare_joint_angles(output_df, ground_truth_df)
+    # delete the column where error is 0
+    error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
+    error_df['time'] = time_vector
+
+    # Evaluation metrics 
+    # Range of Motion and difference in RoM between vicon and sensor fusion
+    rom_vicon = ground_truth_df.max() - ground_truth_df.min()
+    rom_fusion = output_df.max() - output_df.min()
+    rom_error = rom_vicon - rom_fusion
+    plt.figure(figsize=(10, 6))
+    plt.bar(rom_error.index, rom_error.values)
+    plt.xlabel('Joint Angles')
+    plt.ylabel('Range of Motion Error (degrees)')
+    plt.title('Range of Motion Error between Vicon and Sensor Fusion Results')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(results_folder + '/rom_error_best_weights.png')
+
+    # RMSE (Root Mean Square Error) for each joint angle
+    rmse = np.sqrt(1/len(output_df) * np.sum(error_df.drop(columns=['time'])**2))
+    plt.figure(figsize=(10, 6))
+    plt.bar(rmse.index, rmse.values)
+    plt.xlabel('Joint Angles')
+    plt.ylabel('RMSE (degrees)')
+    plt.title('Root Mean Square Error between Vicon and Sensor Fusion Results')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(results_folder + '/rmse_best_weights.png')
+
+    # MAD (Mean Absolute Deviation) for each joint angle
+    mad = 1/len(output_df) * np.sum(error_df.drop(columns=['time']).abs())
+    plt.figure(figsize=(10, 6))
+    plt.bar(mad.index, mad.values)
+    plt.xlabel('Joint Angles')
+    plt.ylabel('MAD (degrees)')
+    plt.title('Mean Absolute Deviation between Vicon and Sensor Fusion Results')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(results_folder + '/mad_best_weights.png')
+
 
 if __name__ == "__main__":
     main()
