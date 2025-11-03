@@ -402,12 +402,29 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
         # Finally, save the corrected vicon file
         # write to a new trc file with the same header
         corrected_vicon_trc_path = f'recordings/subject{subject_ID}/vicon_{trial_ID}.trc'
+        # change header_vicon value: line 3, position 7
+        tokens = header_vicon[2].rstrip().split('\t')
+        tokens[6] = '1'  # OrigDataStartFrame
+        header_vicon[2] = '\t'.join(tokens) + '\n'
         with open(corrected_vicon_trc_path, 'w') as f:
             for line in header_vicon:
                 f.write(line)
-            # write data
-            for index, row in vicon_df.iterrows():
-                f.write('\t'.join([f'{val:.6f}' for val in row.values]) + '\n')
+            # write data: simple, set Frame# to 1..N and format numeric values to 6 decimals
+            for seq, (_, row) in enumerate(vicon_df.iterrows(), start=1):
+                vals = list(row.values)
+                # replace the first column (Frame#) with sequential integer
+                vals[0] = seq
+                out_cells = []
+                for idx, v in enumerate(vals):
+                    try:
+                        if idx == 0:
+                            # Frame# should be an integer without decimals
+                            out_cells.append(str(int(v)))
+                        else:
+                            out_cells.append(f"{float(v):.6f}")
+                    except Exception:
+                        out_cells.append(str(v))
+                f.write('\t'.join(out_cells) + '\n')
     else:
         # Undo previous lag correction
         vicon_df['Time'] = vicon_df['Time'] - time_shift
@@ -593,20 +610,6 @@ def main():
     orientation_weights = [1.0] * 8
     stereocamera_weights = [1.0] * 15
 
-    # results from first optuna optimization (only error minizimation and 100 trials) - finger_nose trial
-    #webcam_weights = [5, 9, 6, 2, 9, 7, 5, 5, 1, 4, 4, 8]
-    #orientation_weights = [2, 3, 7, 5, 8, 0, 2, 9]
-    #stereocamera_weights = [7, 5, 0, 6, 1, 8, 7, 3, 3, 9, 0, 1, 0, 6, 7]
-    # results from first optuna optimization (only error minizimation and 100 trials) - shoulder_abd_add
-    #webcam_weights = [0, 5, 0, 0, 2, 4, 10, 5, 8, 5, 6, 5]
-    #orientation_weights = [9, 4, 9, 3, 4, 6, 1, 2]
-    #stereocamera_weights = [4, 7, 1, 2, 0, 6, 5, 5, 6, 10, 3, 10, 0, 0, 6]
-
-    #results on finger_nose after 1000 trials 
-    #webcam_weights = [6, 7, 10, 0, 0, 7, 4, 0, 9, 6, 7, 0]
-    #orientation_weights = [8, 10, 9, 2, 8, 0, 1, 4]
-    #stereocamera_weights = [2, 5, 5, 10, 0, 1, 7, 1, 1, 3, 9, 10, 3, 8, 3]
-
     output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
     # Read the output
     latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
@@ -626,6 +629,8 @@ def main():
         best_lag = 215
     elif trial_ID == 'wrist_flex_ext':
         best_lag = 290
+    elif trial_ID == "static":
+        best_lag = -120
     else: 
         best_lag = find_lag(vicon_ik_norm, imu_df)
     apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
@@ -708,6 +713,7 @@ def main():
     plt.title('Range of Motion Error between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
+    plt.grid()
     plt.savefig(results_folder + '/rom_error_default_weights.png')
 
     # RMSE (Root Mean Square Error) for each joint angle
@@ -719,6 +725,7 @@ def main():
     plt.title('Root Mean Square Error between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
+    plt.grid()
     plt.savefig(results_folder + '/rmse_default_weights.png')
 
     # MAD (Mean Absolute Deviation) for each joint angle
@@ -730,13 +737,14 @@ def main():
     plt.title('Mean Absolute Deviation between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
+    plt.grid()
     plt.savefig(results_folder + '/mad_default_weights.png')
 
     # Optimization setup
     study_name = "weights_tuning_study_" + subject_ID + "_" + trial_ID
     study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True)
     # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=10000)
+    study.optimize(lambda trial: objective(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=3000)
 
     # Save best trial data in a file 
     file_name = "optuna_results_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
@@ -755,10 +763,21 @@ def main():
     orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
     stereocamera_weights = [best_params[f'stereocamera_weight_{i}'] for i in range(15)]
 
+
     output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
     # Read the output
-    output_df = pd.DataFrame(output)
+    output_header, output_columns, output_df = read_mot_file(output)
     output_df.to_csv(results_folder + '/sensor_fusion_best_params_output.csv', index=False)
+    # Copy output to results folder
+    try:
+        shutil.copy(output, results_folder + '/sensor_fusion_best_params_output.mot')
+    except Exception as e:
+        print(f"Error copying sensor fusion output: {e}")
+    # Copy ground truth ik file to results folder
+    try:
+        shutil.copy(ground_truth_ik_file, results_folder + '/ground_truth_ik_output.mot')
+    except Exception as e:
+        print(f"Error copying ground truth IK file: {e}")
 
     # Compare with ground truth
     error_df = compare_joint_angles(output_df, ground_truth_df)
@@ -778,6 +797,7 @@ def main():
     plt.title('Range of Motion Error between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
+    plt.grid()
     plt.savefig(results_folder + '/rom_error_best_weights.png')
 
     # RMSE (Root Mean Square Error) for each joint angle
@@ -789,6 +809,7 @@ def main():
     plt.title('Root Mean Square Error between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
+    plt.grid()
     plt.savefig(results_folder + '/rmse_best_weights.png')
 
     # MAD (Mean Absolute Deviation) for each joint angle
@@ -800,6 +821,7 @@ def main():
     plt.title('Mean Absolute Deviation between Vicon and Sensor Fusion Results')
     plt.xticks(rotation=90)
     plt.tight_layout()
+    plt.grid()
     plt.savefig(results_folder + '/mad_best_weights.png')
 
 
