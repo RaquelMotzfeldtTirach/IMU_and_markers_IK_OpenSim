@@ -1,40 +1,40 @@
 Best trial parameters:
-webcam_weight_0: 0
-webcam_weight_1: 10
-webcam_weight_2: 10
-webcam_weight_3: 4
-webcam_weight_4: 2
-webcam_weight_5: 9
-webcam_weight_6: 6
-webcam_weight_7: 6
-webcam_weight_8: 7
-webcam_weight_9: 7
-webcam_weight_10: 1
-webcam_weight_11: 9
+webcam_weight_0: 10
+webcam_weight_1: 7
+webcam_weight_2: 3
+webcam_weight_3: 0
+webcam_weight_4: 7
+webcam_weight_5: 10
+webcam_weight_6: 2
+webcam_weight_7: 0
+webcam_weight_8: 10
+webcam_weight_9: 1
+webcam_weight_10: 5
+webcam_weight_11: 1
 orientation_weight_0: 1
 orientation_weight_1: 8
 orientation_weight_2: 1
 orientation_weight_3: 0
 orientation_weight_4: 6
-orientation_weight_5: 4
+orientation_weight_5: 2
 orientation_weight_6: 1
 orientation_weight_7: 10
-stereocamera_weight_0: 4
-stereocamera_weight_1: 3
-stereocamera_weight_2: 5
+stereocamera_weight_0: 5
+stereocamera_weight_1: 9
+stereocamera_weight_2: 0
 stereocamera_weight_3: 3
-stereocamera_weight_4: 10
-stereocamera_weight_5: 7
-stereocamera_weight_6: 4
-stereocamera_weight_7: 4
-stereocamera_weight_8: 8
-stereocamera_weight_9: 2
-stereocamera_weight_10: 1
-stereocamera_weight_11: 8
-stereocamera_weight_12: 6
-stereocamera_weight_13: 6
+stereocamera_weight_4: 3
+stereocamera_weight_5: 2
+stereocamera_weight_6: 0
+stereocamera_weight_7: 0
+stereocamera_weight_8: 9
+stereocamera_weight_9: 1
+stereocamera_weight_10: 2
+stereocamera_weight_11: 10
+stereocamera_weight_12: 5
+stereocamera_weight_13: 7
 stereocamera_weight_14: 4
 
-Best trial value: 403.79518104052914
+Best trial value: 497.987030046759
 
-Number of trials: 2000
+Number of trials: 5000
