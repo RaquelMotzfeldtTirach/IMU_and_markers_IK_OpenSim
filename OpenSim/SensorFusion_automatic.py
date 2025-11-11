@@ -197,7 +197,7 @@ class OpenSimSensorFusion:
         self.webcam_weights = webcam_weights
         self.orientation_weights = orientation_weights
         self.stereocamera_weights = stereocamera_weights
-        self.constraint_var = constraint_var # will actually be infinity
+        self.constraint_var = constraint_var 
 
         # Create orientation weights
         self.orientationWeights = osim.OrientationWeightSet()
@@ -270,12 +270,10 @@ class OpenSimSensorFusion:
             print(f"Using shortest timestamps for downsampling: {len(shortest_times)} samples")
             self.nb_frames = len(shortest_times)
             self.new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * self.nb_frames
-            #new_fps = new_fps 
         elif len(times) == 1:
             shortest_times = times[0]
             self.nb_frames = len(shortest_times)
             self.new_fps = 1 / (shortest_times[-1] - shortest_times[0]) * self.nb_frames
-            #self.new_fps = self.new_fps
         else:
             print("No data available, downsampling aborted")
             return

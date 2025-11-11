@@ -3,10 +3,13 @@ import numpy as np
 import pandas as pd
 import os
 import shutil
+import argparse
 
-def get_data(): 
-
-    subject_id = input("Enter the subject ID (e.g., '29'): ")
+def get_data(ID): 
+    if ID != '':
+        subject_id = ID
+    else:
+        subject_id = input("Enter the subject ID (e.g., '29'): ")
     # Make folder in recordings if it doesn't exist
     subject_folder = f"recordings/subject{subject_id}"
     if not os.path.exists(subject_folder):
@@ -66,5 +69,10 @@ def get_data():
 
 
 if __name__ == "__main__":
-    get_data()
+    parser = argparse.ArgumentParser(description="Fetches all the necessary data for subject in question")
+    parser.add_argument("--SUBJECT_ID", type=str, help="Subject ID number", default='')
+    
+    args = parser.parse_args()
+
+    get_data(args.SUBJECT_ID)
         
