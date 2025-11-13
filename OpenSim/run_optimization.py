@@ -56,12 +56,13 @@ def main(ID):
     # Find time synchronization for each trial (not static for subject 92)
     lags = {}
     for trial in trials:
-        lag = time_synchronization(subject_ID=subject_id, trial_ID=trial)
-        lags[trial] = lag
+        if trial != 'static':
+            lag = time_synchronization(subject_ID=subject_id, trial_ID=trial)
+            lags[trial] = lag
 
     # Run optimization for each trial
     for trial in trials:
-        if trial !="clapping" and trial != "static":
+        if trial != "static":
             weight_tuning_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags[trial])
         else: 
             continue
