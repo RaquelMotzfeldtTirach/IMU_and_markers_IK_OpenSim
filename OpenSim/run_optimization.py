@@ -6,6 +6,7 @@ import shutil
 import argparse
 import glob
 from WeightsTuningModule import main as weight_tuning_module
+from TimeSynchronization import main as time_synchronization
 
 
 def parse_subject_info(content):
@@ -51,10 +52,17 @@ def main(ID):
         trials.append(file)
     print("Trials: ", trials)
 
+
+    # Find time synchronization for each trial (not static for subject 92)
+    lags = {}
+    for trial in trials:
+        lag = time_synchronization(subject_ID=subject_id, trial_ID=trial)
+        lags[trial] = lag
+
     # Run optimization for each trial
     for trial in trials:
         if trial !="clapping" and trial != "static":
-            weight_tuning_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'])
+            weight_tuning_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags[trial])
         else: 
             continue
 

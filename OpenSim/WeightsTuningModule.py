@@ -399,10 +399,10 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.title('Right Hand X Component')
     plt.legend()
     plt.tight_layout()
-    #plt.show()
+    plt.show()
 
-    #confirmed = input("Are you satisfied with the time correction? (y/n): ")
-    confirmed = 'y'  # for now, assume user is satisfied
+    confirmed = input("Are you satisfied with the time correction? (y/n): ")
+    #confirmed = 'y'  # for now, assume user is satisfied
 
     if confirmed.lower() == 'y':
         # Finally, save the corrected vicon file
@@ -681,7 +681,7 @@ def objective_imu_only(trial, ground_truth_df, constraint_var, subject_ID, trial
     return total 
 
 
-def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None, subject_age=None, subject_sex=None):
+def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None, subject_age=None, subject_sex=None, lag=0):
     # Default weights
     # WEBCAM WEIGHTS: right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, right pinky, left pinky, right index, left index, right hip, left hip
     # ORIENTATION WEIGHTS: torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
@@ -700,24 +700,8 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
     # Time synchronise the vicon data
     vicon_df, vicon_ik_norm, imu_df, header_vicon, columns_vicon = time_correction(subject_ID, trial_ID)
-    # This is for subject 34 #TO CHANGE
-    if trial_ID == 'clapping':
-        best_lag = 262
-    elif trial_ID == 'finger_nose':
-        best_lag = 215
-    elif trial_ID == 'shoulder_abd_add':
-        best_lag = 75
-    elif trial_ID == 'elbow_flex_ext':
-        best_lag = 244
-    elif trial_ID == 'elbow_sub_pro':
-        best_lag = 215
-    elif trial_ID == 'wrist_flex_ext':
-        best_lag = 290
-    elif trial_ID == "static":
-        best_lag = -120
-    else: 
-        best_lag = find_lag(vicon_ik_norm, imu_df)
-    apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
+    
+    apply_lag_correction(vicon_df, lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
     
 
     # Ground truth IK run - Vicon
@@ -779,6 +763,8 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.tight_layout()
     plt.grid()
     plt.savefig(results_folder + '/mad_default_weights.png')
+
+    '''
 
     # Optimization setup
     study_name = "IMU_ONLY_weights_tuning_study_" + subject_ID + "_" + trial_ID
@@ -916,6 +902,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.tight_layout()
     plt.grid()
     plt.savefig(results_folder + '/mad_difference.png')
+    '''
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process subject data.")
@@ -925,6 +912,7 @@ if __name__ == "__main__":
     parser.add_argument("--subject_height", type=str, required=True, help="Subject height (mm)")
     parser.add_argument("--subject_age", type=str, required=True, help="Subject age (years)")
     parser.add_argument("--subject_sex", type=str, required=True, help="Subject sex (M/F)")
+    parser.add_argument("--lag", type=int, required=True, help="Lag between IMU and vicon for this trial" )
     args = parser.parse_args()
 
-    main(args.subject_ID, args.trial_ID, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex)
+    main(args.subject_ID, args.trial_ID, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex, args.lag)
