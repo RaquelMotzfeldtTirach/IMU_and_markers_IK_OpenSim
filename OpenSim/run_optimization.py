@@ -60,7 +60,15 @@ def main(ID):
             lag = time_synchronization(subject_ID=subject_id, trial_ID=trial)
             lags[trial] = lag
 
+    print("lags: ", lags)
+
     # Run optimization for each trial
+    # TODO: should run the calibration and correction for the static data, maybe the whole thing with clap then!
+    # TODO: should fix the vicon markers problem: expected 26 but only found 23
+    # TODO: should decide the IK in two parts: preparing everything -> only once before optuna, updating the weights and runing the IK -> many times with optuna and parallel computing! 
+    # TODO: devide the jobs between only imu, with webcam and with stereocamera
+    # TODO: store the results and show the metrics and weights, etc in a nice way! :) 
+
     for trial in trials:
         if trial != "static":
             weight_tuning_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags[trial])

@@ -92,14 +92,26 @@ def find_clap(df, min_common):
     if len(common_spike_timestamps.values) > 0:
         # Find the largest spike value(s)
         largest_spike_value = spike_count[common_spike_timestamps.values].max()  # Get the maximum spike count
-        largest_spikes = spike_count[spike_count == largest_spike_value]
+        largest_spikes = spike_count[spike_count == largest_spike_value].index
+        print("Largest spikes: ", largest_spikes.values)
         
         # Calculate the median of these spikes if there are multiple
-        median_spike = largest_spikes.median()
+        median_spike = np.median(largest_spikes.values)
+        print("Median largest spikes: ", median_spike)
 
         return median_spike
     else:
-        return 0
+        print("No spikes in common have been found:")
+        # no common spikes, so let's take the biggest spike 
+        largest_spike_value = spike_count.max()
+        largest_spikes = spike_count[spike_count == largest_spike_value].index
+        print("Largest spikes: ", largest_spikes.values)
+        
+        # Calculate the median of these spikes if there are multiple
+        median_spike = np.median(largest_spikes.values)
+        print("Median largest spikes: ", median_spike)
+
+        return median_spike
 
 def main(subject_ID, trial_ID): 
     print("Looking for lag corresponding to trial ", trial_ID)
@@ -116,12 +128,15 @@ def main(subject_ID, trial_ID):
     vicon_clap_df = read_vicon_trc_file(vicon_file_name)
 
     # Find timestamp for clap
+    print("IMU: ")
     imu_clap_time = find_clap(imu_accel_df, min_common=2)
+    print("Vicon: ")
     vicon_clap_time = find_clap(vicon_clap_df, min_common=3)
 
     lag = int(imu_clap_time - vicon_clap_time)
-    #TODO !! NOT FINISHED, SOMETHING IS WRONG HERE 
-
+    
+    print("Lag for trial", trial_ID)
+    print("is ", -lag)
     return -lag
 
 
