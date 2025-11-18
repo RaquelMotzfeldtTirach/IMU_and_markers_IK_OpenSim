@@ -260,11 +260,6 @@ def main(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, sub
         
         if marker_errors.size() > 0:
             
-            # Validate that we have enough error values for all markers
-            expected_markers = num_markers
-            if marker_errors.size() < expected_markers:
-                print(f"WARNING: Not enough marker errors! Expected {expected_markers}, got {marker_errors.size()}")
-            
             # Calculate statistics 
             for j in range(min(num_markers, marker_errors.size())):
                 vicon_squared_error = marker_errors.getElt(j)

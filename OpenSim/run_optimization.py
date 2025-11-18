@@ -66,6 +66,8 @@ def main(ID):
     # Run optimization for each trial
     # TODO: should run the calibration and correction for the static data, maybe the whole thing with clap then!
     # TODO: should fix the vicon markers problem: expected 26 but only found 23
+    # TODO: get ridd of warning about dataframe concatenation being outdated
+    # FutureWarning: The behavior of DataFrame.sum with axis=None is deprecated, in a future version this will reduce over both axes and return a scalar. To retain the old behavior, pass axis=0 (or do not pass axis) return reduction(axis=axis, out=out, **passkwargs)
     # TODO: should devide the IK in two parts: preparing everything -> only once before optuna, updating the weights and runing the IK -> many times with optuna and parallel computing! 
     # TODO: devide the jobs between only imu, with webcam and with stereocamera
     # TODO: store the results and show the metrics and weights, etc in a nice way! jupiter notebook maybe :) 

@@ -28,18 +28,26 @@ def read_imu_txt_file(file_path):
     update_rate_match = re.search(update_rate_pattern, imu_data)
     if update_rate_match:
         frequency = int(update_rate_match.group(1).replace('Hz', ''))
-    
+
     # Reading imu acceleration in x, y and z
-    count = 0
     threshold = 6
-    imu_accel = pd.DataFrame(columns=['Time', 'Acc_x', 'Acc_y', 'Acc_z'])
-    with open(file_path, 'r') as f: 
-        for line in f:
-            if count >= threshold:
-                data = line.split('\t')
-                new_row = {'Time': int(data[0]), 'Acc_x': float(data[14]), 'Acc_y': float(data[15]), 'Acc_z': float(data[16])}
-                imu_accel = pd.concat([imu_accel, pd.DataFrame([new_row])], ignore_index=True)
-            count += 1
+    usecols = [0, 14, 15, 16]                      # columns we need by index
+    col_names = ['Time', 'Acc_x', 'Acc_y', 'Acc_z']
+
+    # Read once with pandas, skip the header lines, skip malformed rows
+    imu_accel = pd.read_csv(
+        file_path,
+        sep='\t',
+        header=None,
+        skiprows=threshold,
+        usecols=usecols,
+        names=col_names,
+        dtype=str,
+        on_bad_lines='skip'   # pandas >= 1.3; skips lines that don't parse
+    )
+
+    # Convert to numeric, drop rows that failed conversion, reset index
+    imu_accel = imu_accel.apply(pd.to_numeric, errors='coerce').dropna().reset_index(drop=True)
 
     # Changing the Time column to actual time in timestamps
     imu_accel['Time'] = imu_accel['Time'] / frequency + start_timestamp
@@ -86,8 +94,8 @@ def find_clap(df, min_common):
     for col in df.columns:
         spike_indicators[col] = detect_spike(df[col])
     spike_count = spike_indicators.sum(axis=1)
-    spike_count.plot()
-    plt.show()
+    #spike_count.plot()
+    #plt.show()
     common_spike_timestamps = spike_count[spike_count >= min_common].index
     if len(common_spike_timestamps.values) > 0:
         # Find the largest spike value(s)

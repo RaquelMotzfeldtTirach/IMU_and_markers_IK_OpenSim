@@ -586,7 +586,7 @@ def objective_all(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, 
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
     # Calculate the RMSE
-    rmse = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
+    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
     # Sensor penalty
     if webcam_weights != [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] and stereocamera_weights != [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]:
@@ -595,7 +595,7 @@ def objective_all(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, 
         penalty = 0
 
     # Sum up the RMSE values
-    total = np.sum(rmse) + penalty
+    total = rmse.sum(axis=0) + penalty
 
     return total 
 
@@ -619,10 +619,10 @@ def objective_webcam(trial, ground_truth_df, constraint_var, subject_ID, trial_I
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
     # Calculate the RMSE
-    rmse = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
+    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
     # Sum up the RMSE values
-    total = np.sum(rmse)
+    total = rmse.sum(axis=0)
 
     return total 
 
@@ -646,10 +646,10 @@ def objective_stereocamera(trial, ground_truth_df, constraint_var, subject_ID, t
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
     # Calculate the RMSE
-    rmse = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
+    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
     # Sum up the RMSE values
-    total = np.sum(rmse)
+    total = rmse.sum(axis=0)
 
     return total 
 
@@ -673,10 +673,10 @@ def objective_imu_only(trial, ground_truth_df, constraint_var, subject_ID, trial
     error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
     # Calculate the RMSE
-    rmse = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
+    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
     # Sum up the RMSE values
-    total = np.sum(rmse)
+    total = rmse.sum(axis=0)
 
     return total 
 
@@ -741,7 +741,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.savefig(results_folder + '/rom_error_default_weights.png')
 
     # RMSE (Root Mean Square Error) for each joint angle
-    rmse_default = np.sqrt(1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time'])**2))
+    rmse_default = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
     plt.figure(figsize=(10, 6))
     plt.bar(rmse_default.index, rmse_default.values)
     plt.xlabel('Joint Angles')
@@ -753,7 +753,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.savefig(results_folder + '/rmse_default_weights.png')
 
     # MAD (Mean Absolute Deviation) for each joint angle
-    mad_default = 1/len(latest_ik_results_df) * np.sum(error_df.drop(columns=['time']).abs())
+    mad_default = (error_df.drop(columns=['time']).abs()).sum(axis=0) / len(latest_ik_results_df)
     plt.figure(figsize=(10, 6))
     plt.bar(mad_default.index, mad_default.values)
     plt.xlabel('Joint Angles')
