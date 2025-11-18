@@ -17,6 +17,14 @@ def get_data(ID):
         print(f"Created folder: {subject_folder}")
     else:
         print(f"Folder already exists: {subject_folder}")
+
+    # Make a raw_data folder inside subject_folder
+    raw_data_folder = os.path.join(subject_folder, "raw_data")
+    if not os.path.exists(raw_data_folder):
+        os.makedirs(raw_data_folder)
+        print(f"Created folder: {raw_data_folder}")
+    else:
+        print(f"Folder already exists: {raw_data_folder}")
     
     # Fetch the stereocamera trc files
     stereocamera_path = f"/home/raquel/Documents/ZED/body tracking/recordings/subject{subject_id}/" 
@@ -67,6 +75,7 @@ def get_data(ID):
     else:
         print(f"IMU source folder doesn't exist: {imu_path}")
 
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetches all the necessary data for subject in question")

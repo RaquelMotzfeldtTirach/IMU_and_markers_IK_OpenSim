@@ -2,8 +2,10 @@ import os
 import shutil
 import numpy as np
 import pandas as pd
+import opensim as osim
 import optuna
-from SensorFusion_automatic import main as sensor_fusion
+from SensorFusion_automatic import sensor_fusion_initialization 
+from SensorFusion_automatic import run_sensor_fusion
 from ViconIK import main as vicon_ik
 import matplotlib.pyplot as plt
 import statistics as stats
@@ -110,192 +112,9 @@ def time_correction(subject_ID, trial_ID):
     #print(imu_df.head())
     return vicon_df, vicon_df_norm, imu_df, header_vicon, columns_vicon
 
-
-def find_lag(vicon_df, imu_df):
-    """ Find the time lag between the vicon data and the imu data based on cross-correlation of selected segments
-        Robust to NaNs in either IMU quaternions or Vicon marker components.
-    """
-    # Now select some pairs of columns to compare
-    humerus_r_imu_quat = imu_df['humerus_r_imu'].tolist()
-    humerus_l_imu_quat = imu_df['humerus_l_imu'].tolist()
-    radius_r_imu_quat = imu_df['radius_r_imu'].tolist()
-    radius_l_imu_quat = imu_df['radius_l_imu'].tolist()
-    hand_r_imu_quat = imu_df['hand_r_imu'].tolist()
-    hand_l_imu_quat = imu_df['hand_l_imu'].tolist()
-    humerus_r_vicon = vicon_df[['X14', 'Y14', 'Z14']].values.tolist()
-    humerus_l_vicon = vicon_df[['X7', 'Y7', 'Z7']].values.tolist()
-    radius_r_vicon = vicon_df[['X16', 'Y16', 'Z16']].values.tolist()
-    radius_l_vicon = vicon_df[['X9', 'Y9', 'Z9']].values.tolist()
-    hand_r_vicon = vicon_df[['X19', 'Y19', 'Z19']].values.tolist()
-    hand_l_vicon = vicon_df[['X12', 'Y12', 'Z12']].values.tolist()
-
-
-    # Then find the time lag be using cross-correlation between the vicon data and the imu data
-    nb_lags = len(vicon_df)
-    lags = np.arange(-nb_lags//10 + 1, nb_lags//10)
-    best_lag_hum_l = 0
-    best_corr_lag_hum_l = 0
-    best_lag_hum_r = 0
-    best_corr_lag_hum_r = 0
-    best_lag_rad_l = 0
-    best_corr_lag_rad_l = 0
-    best_lag_rad_r = 0
-    best_corr_lag_rad_r = 0
-    best_lag_hand_l = 0
-    best_corr_lag_hand_l = 0
-    best_lag_hand_r = 0
-    best_corr_lag_hand_r = 0
-    lag_coor = [[], [], [], [], [], []]  # to store lag correlations for each of the 6 segments
-
-    print("Calculating cross-correlations for lag detection...")
-    
-    for lag in lags:
-        corr = 0
-        for i in range(len(humerus_l_imu_quat)):
-            j = i + lag
-            if j < 0 or j >= len(humerus_l_vicon):
-                continue
-            # Convert quaternion to vector (just use the vector part)
-            q = humerus_l_imu_quat[i] 
-            q = (-np.array(q)).tolist() + [1, 1, 1, 1]
-            v = humerus_l_vicon[j]
-            if np.isnan(q).any() or np.isnan(v).any():
-                corr += 0
-            else:
-                # Simple dot product as correlation measure
-                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
-        lag_coor[0].append(corr)
-        if corr > best_corr_lag_hum_l:
-            best_corr_lag_hum_l = corr
-            best_lag_hum_l = lag
-        corr = 0
-        for i in range(len(humerus_r_imu_quat)):
-            j = i + lag
-            if j < 0 or j >= len(humerus_r_vicon):
-                continue
-            # Convert quaternion to vector (just use the vector part)
-            q = humerus_r_imu_quat[i]
-            v = humerus_r_vicon[j]
-            if np.isnan(q).any() or np.isnan(v).any():
-                corr += 0
-            else:  
-                # Simple dot product as correlation measure
-                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
-        lag_coor[1].append(corr)
-        if corr > best_corr_lag_hum_r:
-            best_corr_lag_hum_r = corr
-            best_lag_hum_r = lag
-        corr = 0
-        for i in range(len(radius_l_imu_quat)):
-            j = i + lag
-            if j < 0 or j >= len(radius_l_vicon):
-                continue
-            # Convert quaternion to vector (just use the vector part)
-            q = radius_l_imu_quat[i]
-            q = (-np.array(q)).tolist() + [1, 1, 1, 1]
-            v = radius_l_vicon[j]
-            if np.isnan(q).any() or np.isnan(v).any():
-                corr += 0
-            else:
-                # Simple dot product as correlation measure
-                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
-        lag_coor[2].append(corr)
-        if corr > best_corr_lag_rad_l:
-            best_corr_lag_rad_l = corr
-            best_lag_rad_l = lag
-        corr = 0
-        for i in range(len(radius_r_imu_quat)): 
-            j = i + lag
-            if j < 0 or j >= len(radius_r_vicon):
-                continue
-            # Convert quaternion to vector (just use the vector part)
-            q = radius_r_imu_quat[i]
-            v = radius_r_vicon[j]
-            if np.isnan(q).any() or np.isnan(v).any():
-                corr += 0
-            else:
-               # Simple dot product as correlation measure
-                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
-        lag_coor[3].append(corr)
-        if corr > best_corr_lag_rad_r:
-            best_corr_lag_rad_r = corr
-            best_lag_rad_r = lag
-        corr = 0
-        for i in range(len(hand_l_imu_quat)):
-            j = i + lag
-            if j < 0 or j >= len(hand_l_vicon):
-                continue
-            # Convert quaternion to vector (just use the vector part)
-            q = hand_l_imu_quat[i] 
-            q = (-np.array(q)).tolist() + [1, 1, 1, 1]
-            v = hand_l_vicon[j]
-            if np.isnan(q).any() or np.isnan(v).any():
-                corr += 0
-            else:
-                # Simple dot product as correlation measure
-                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
-        lag_coor[4].append(corr)
-        if corr > best_corr_lag_hand_l:
-            best_corr_lag_hand_l = corr
-            best_lag_hand_l = lag
-        corr = 0
-        for i in range(len(hand_r_imu_quat)):
-            j = i + lag
-            if j < 0 or j >= len(hand_r_vicon):
-                continue
-            # Convert quaternion to vector (just use the vector part)
-            q = hand_r_imu_quat[i]
-            v = hand_r_vicon[j]
-            if np.isnan(q).any() or np.isnan(v).any():
-                corr += 0
-            else:
-                # Simple dot product as correlation measure
-                corr += abs(q[1]*v[0]) + abs(q[2]*v[1]) + abs(q[3]*v[2])
-        lag_coor[5].append(corr)
-        if corr > best_corr_lag_hand_r:
-            best_corr_lag_hand_r = corr
-            best_lag_hand_r = lag
-    # plot lag_corr for all 6 over the lags
-    plt.figure()
-    plt.plot(lags, lag_coor[0], label='Left Humerus')
-    plt.plot(lags, lag_coor[1], label='Right Humerus')
-    plt.plot(lags, lag_coor[2], label='Left Radius')
-    plt.plot(lags, lag_coor[3], label='Right Radius')
-    plt.plot(lags, lag_coor[4], label='Left Hand')
-    plt.plot(lags, lag_coor[5], label='Right Hand')
-    plt.xlabel('Lag (samples)')
-    plt.ylabel('Cross-correlation')
-    plt.title('Cross-correlation vs Lag')
-    plt.legend()
-    plt.show()
-
-    # total correlation 
-    array1 = np.array(lag_coor[0])
-    array2 = np.array(lag_coor[1])
-    array3 = np.array(lag_coor[2])
-    array4 = np.array(lag_coor[3])
-    array5 = np.array(lag_coor[4])
-    array6 = np.array(lag_coor[5])
-    total_corr = array1 + array2 + array3 + array4 + array5 + array6
-    plt.figure()
-    plt.plot(lags, total_corr, label='Total Correlation', color='black')
-    plt.xlabel('Lag (samples)')
-    plt.ylabel('Total Cross-correlation')
-    plt.title('Total Cross-correlation vs Lag')
-    plt.legend()
-    plt.show()
-
-    print(f'Best lag hum left: {best_lag_hum_l} samples and best lag hum right: {best_lag_hum_r} samples')
-    print(f'Best lag rad left: {best_lag_rad_l} samples and best lag rad right: {best_lag_rad_r} samples')
-    print(f'Best lag hand left: {best_lag_hand_l} samples and best lag hand right: {best_lag_hand_r} samples')
-    best_lag = np.argmax(total_corr) - (nb_lags//10 - 1)
-    print(f'Overall best lag: {best_lag} samples')
-    
-    return best_lag
-    
-    # Now correct the vicon time vector
 def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon):
     '''
+    Apply the lag correction to the vicon dataframe and plot the results for verification.
 
     '''
     time_shift = - best_lag / 100.0  # assuming 100Hz
@@ -335,6 +154,8 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     vicon_plot = safe_normalize(vicon_df['X7'].values, invert=True)
 
     # Plot with subplots for left humerus, right humerus, left radius, right radius, left hand, right hand, torso
+    plt.clf()
+    plt.close('all')
     plt.figure(figsize=(12, 10))    
     plt.subplot(3, 2, 1)
     plt.plot(imu_df['time'], imu_plot, label='IMU Humerus L X', alpha=0.7)
@@ -400,6 +221,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.legend()
     plt.tight_layout()
     plt.show()
+    
 
     confirmed = input("Are you satisfied with the time correction? (y/n): ")
     #confirmed = 'y'  # for now, assume user is satisfied
@@ -566,123 +388,50 @@ def downsample(groundtruth_df, time_vector): #TODO: check that this is working
     downsampled_df = downsampled_df[groundtruth_df.columns]
     return downsampled_df
 
-def objective_all(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
-    # Define weight parameters to optimize
-    webcam_weights = [trial.suggest_int(f'webcam_weight_{i}', 0, 10) for i in range(12)]  # Example: 12 webcam weights
-    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
-    stereocamera_weights = [trial.suggest_int(f'stereocamera_weight_{i}', 0, 10) for i in range(15)]  # Example: 15 stereocamera weights
 
-    # Run IK with updated weights
-    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    
-    # Read latest output
-    latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
-
-    # Downsample ground truth to match the time vector of the latest IK results
-    time_vector = latest_ik_results_df['time'].values
-    ground_truth_df = downsample(ground_truth_df, time_vector)
-
-    # Compare with ground truth
-    error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
-
-    # Calculate the RMSE
-    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
-
-    # Sensor penalty
-    if webcam_weights != [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] and stereocamera_weights != [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]:
-        penalty = 200 # high penalty if both webcam and stereocamera are used
-    else:
-        penalty = 0
-
-    # Sum up the RMSE values
-    total = rmse.sum(axis=0) + penalty
-
-    return total 
-
-def objective_webcam(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
-    # Define weight parameters to optimize
-    webcam_weights = [trial.suggest_int(f'webcam_weight_{i}', 0, 10) for i in range(12)]  # Example: 12 webcam weights
-    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
-    stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Stereocamera not taken into account
-
-    # Run IK with updated weights
-    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    
-    # Read latest output
-    latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
-
-    # Downsample ground truth to match the time vector of the latest IK results
-    time_vector = latest_ik_results_df['time'].values
-    ground_truth_df = downsample(ground_truth_df, time_vector)
-
-    # Compare with ground truth
-    error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
-
-    # Calculate the RMSE
-    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
-
-    # Sum up the RMSE values
-    total = rmse.sum(axis=0)
-
-    return total 
-
-def objective_stereocamera(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
-    # Define weight parameters to optimize
-    webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
-    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
-    stereocamera_weights = [trial.suggest_int(f'stereocamera_weight_{i}', 0, 10) for i in range(15)]  # Example: 15 stereocamera weights
-
-    # Run IK with updated weights
-    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    
-    # Read latest output
-    latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
-
-    # Downsample ground truth to match the time vector of the latest IK results
-    time_vector = latest_ik_results_df['time'].values
-    ground_truth_df = downsample(ground_truth_df, time_vector)
-
-    # Compare with ground truth
-    error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
-
-    # Calculate the RMSE
-    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
-
-    # Sum up the RMSE values
-    total = rmse.sum(axis=0)
-
-    return total 
-
-def objective_imu_only(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
+def objective_imu_only(sensor_fusion, trial, ground_truth_df, constraint_var, subject_ID, trial_ID):
     # Define weight parameters to optimize
     webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
     orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
     stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
 
     # Run IK with updated weights
-    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    
-    # Read latest output
-    latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
+    try:
+        output_storage = run_sensor_fusion(sensor_fusion, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
+        # Save the results to mot file
+        output = f'analytics/subject_{subject_ID}/{trial_ID}/optimization/optuna_trial_{trial.number}ik_results_subject_{subject_ID}_trial_{trial_ID}.mot'
+        output_storage.printResult(output_storage, f"optuna_trial_{trial.number}ik_results_subject_{subject_ID}_trial_{trial_ID}", f'analytics/subject_{subject_ID}/{trial_ID}/optimization/', -1, ".mot")
 
-    # Downsample ground truth to match the time vector of the latest IK results
-    time_vector = latest_ik_results_df['time'].values
-    ground_truth_df = downsample(ground_truth_df, time_vector)
+        # Read latest output
+        latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
 
-    # Compare with ground truth
-    error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
+        # Downsample ground truth to match the time vector of the latest IK results
+        time_vector = latest_ik_results_df['time'].values
+        ground_truth_df = downsample(ground_truth_df, time_vector)
 
-    # Calculate the RMSE
-    rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
+        # Compare with ground truth
+        error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
-    # Sum up the RMSE values
-    total = rmse.sum(axis=0)
+        # Calculate the RMSE
+        rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
+
+        # Sum up the RMSE values
+        total = rmse.sum(axis=0)
+
+        # Delete the output file to save space
+        #os.remove(output)
+    except Exception as e:
+        print(f"Error during optimization trial {trial.number}: {e}")
+        total = float('inf')  # Assign a large penalty value in case of error
+        # Set optuna trial as failed
+        raise optuna.TrialPruned()
 
     return total 
 
 
 def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None, subject_age=None, subject_sex=None, lag=0, optimization=True):
-    # Default weights
+    ## SENSOR FUSION: Default weights
+
     # WEBCAM WEIGHTS: right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, right pinky, left pinky, right index, left index, right hip, left hip
     # ORIENTATION WEIGHTS: torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
     # STEREOCAMERA WEIGHTS: neck, right clavicle, left clavicle, right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, spine 3, spine 2, spine 1, pelvis, right hip, left hip
@@ -694,18 +443,40 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     orientation_weights = [1.0] * 8
     stereocamera_weights = [1.0] * 15
 
-    output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-    # Read the output
-    latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(output)
+    # Make a folder for the analytics 
+    results_folder_default = f'analytics/subject_{subject_ID}/{trial_ID}/default_weights/'
+    if not os.path.exists(results_folder_default):
+        os.makedirs(results_folder_default)
 
+    # Initialize and run sensor fusion with default weights
+    fusion_default = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+    default_results = run_sensor_fusion(fusion_default, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
+
+    # Save the results to mot file
+    motFileName = results_folder_default + "ik_results_subject_"+str(fusion_default.subject_ID)+"_trial_"+str(fusion_default.trial_ID)+".mot"
+    default_results.printResult(default_results, "ik_results_subject_"+str(fusion_default.subject_ID)+"_trial_"+str(fusion_default.trial_ID), results_folder_default, -1, ".mot")
+    print(f"Results saved to: {motFileName}")
+    
+    # Read the output
+    latest_ik_results_header, latest_ik_results_columns, latest_ik_results_df = read_mot_file(motFileName)
+
+
+    ## VICON
     # Time synchronise the vicon data
     vicon_df, vicon_ik_norm, imu_df, header_vicon, columns_vicon = time_correction(subject_ID, trial_ID)
-    
     apply_lag_correction(vicon_df, lag, imu_df, subject_ID, trial_ID, header_vicon, columns_vicon)
     
+    # Make a folder for the analytics 
+    results_folder_gt = f'analytics/subject_{subject_ID}/{trial_ID}/ground_truth/'
+    if not os.path.exists(results_folder_gt):
+        os.makedirs(results_folder_gt)
 
     # Ground truth IK run - Vicon
-    ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex) 
+    ground_truth_ik_file = vicon_ik(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex)
+    # Move ground truth ik file to results folder
+    shutil.move(ground_truth_ik_file, os.path.join(results_folder_gt, os.path.basename(ground_truth_ik_file)))
+    ground_truth_ik_file = os.path.join(results_folder_gt, os.path.basename(ground_truth_ik_file))
+    # Read ground truth ik file
     ground_truth_ik_header, ground_truth_ik_columns, ground_truth_df = read_mot_file(ground_truth_ik_file)
 
 
@@ -713,18 +484,14 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     time_vector = latest_ik_results_df['time'].values.tolist()
     ground_truth_df = downsample(ground_truth_df, time_vector)
 
+
+    ## ANALYTICS - Default weights
     # Compare with ground truth
     error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df)
     # delete the column where error is 0
     error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
     error_df['time'] = time_vector
    
-    # Make a folder for the analytics 
-    results_folder = f'analytics_imu_only/subject_{subject_ID}_trial_{trial_ID}'
-    if not os.path.exists(results_folder):
-        os.makedirs(results_folder)
-    
-
     # Evaluation metrics 
     # Range of Motion and difference in RoM between vicon and sensor fusion
     rom_vicon_default = ground_truth_df.max() - ground_truth_df.min()
@@ -738,7 +505,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.grid()
-    plt.savefig(results_folder + '/rom_error_default_weights.png')
+    plt.savefig(results_folder_default + '/rom_error_default_weights.png')
 
     # RMSE (Root Mean Square Error) for each joint angle
     rmse_default = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
@@ -750,7 +517,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.grid()
-    plt.savefig(results_folder + '/rmse_default_weights.png')
+    plt.savefig(results_folder_default + '/rmse_default_weights.png')
 
     # MAD (Mean Absolute Deviation) for each joint angle
     mad_default = (error_df.drop(columns=['time']).abs()).sum(axis=0) / len(latest_ik_results_df)
@@ -762,21 +529,41 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.grid()
-    plt.savefig(results_folder + '/mad_default_weights.png')
+    plt.savefig(results_folder_default + '/mad_default_weights.png')
 
     if optimization: 
+        # Number of trials for optimization
+        nb_trials = 100 #TODO: CHANGE DEPENDING ON THE COMPUTE POWER
 
-        '''
+        # Make a folder for the analytics 
+        results_folder_opt = f'analytics/subject_{subject_ID}/{trial_ID}/optimization/{nb_trials}/'
+        if not os.path.exists(results_folder_opt):
+            os.makedirs(results_folder_opt)
+        
+        # Initialize Sensor Fusion for optimization
+        fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
 
         # Optimization setup
-        study_name = "IMU_ONLY_weights_tuning_study_" + subject_ID + "_" + trial_ID
+        study_name = "imu_only_weights_tuning_study_" + subject_ID + "_" + trial_ID + "_" + str(nb_trials)
         study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_only(trial, ground_truth_df, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex), n_trials=500)
+        study.optimize(lambda trial: objective_imu_only(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=12)
+
+        # Delete all the trial ik results to save space
+        optimization_folder = f'analytics/subject_{subject_ID}/{trial_ID}/optimization/'
+        # Assuming those files start with 'optuna_trial_' and end with '.mot'
+        for filename in os.listdir(optimization_folder):
+            if filename.startswith('optuna_trial_') and filename.endswith('.mot'):
+                file_path = os.path.join(optimization_folder, filename)
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f"Error deleting file {file_path}: {e}")
+
 
         # Save best trial data in a file 
-        file_name = "optuna_results_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
-        file_name = os.path.join(results_folder, file_name)
+        file_name = "optuna_results_imu_only_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
+        file_name = os.path.join(results_folder_opt, file_name)
         with open(file_name, 'w') as f:
             f.write("Best trial parameters:\n")
             for key, value in study.best_params.items():
@@ -787,25 +574,17 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
         # Run sensor fusion with best weights
         best_params = study.best_params
-        webcam_weights = [best_params[f'webcam_weight_{i}'] for i in range(12)]
         orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
-        stereocamera_weights = [best_params[f'stereocamera_weight_{i}'] for i in range(15)]
+        webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
+        stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
 
+        output = run_sensor_fusion(fusion_opt, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
+        # Save the results to mot file
+        output_file_name = results_folder_opt + "ik_results_subject_"+str(fusion_opt.subject_ID)+"_trial_"+str(fusion_opt.trial_ID)+"_best_params.mot"
+        output.printResult(output, "ik_results_subject_"+str(fusion_opt.subject_ID)+"_trial_"+str(fusion_opt.trial_ID)+"_best_params", results_folder_opt, -1, ".mot")
+        print(f"Results saved to: {output_file_name}")
 
-        output = sensor_fusion(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
-        # Read the output
-        output_header, output_columns, output_df = read_mot_file(output)
-        output_df.to_csv(results_folder + '/sensor_fusion_best_params_output.csv', index=False)
-        # Copy output to results folder
-        try:
-            shutil.copy(output, results_folder + '/sensor_fusion_best_params_output.mot')
-        except Exception as e:
-            print(f"Error copying sensor fusion output: {e}")
-        # Copy ground truth ik file to results folder
-        try:
-            shutil.copy(ground_truth_ik_file, results_folder + '/ground_truth_ik_output.mot')
-        except Exception as e:
-            print(f"Error copying ground truth IK file: {e}")
+        output_header, output_columns, output_df = read_mot_file(output_file_name)
 
         # Compare with ground truth
         error_df = compare_joint_angles(output_df, ground_truth_df)
@@ -826,7 +605,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.xticks(rotation=90)
         plt.tight_layout()
         plt.grid()
-        plt.savefig(results_folder + '/rom_error_best_weights.png')
+        plt.savefig(results_folder_opt + '/rom_error_best_weights.png')
 
         # RMSE (Root Mean Square Error) for each joint angle
         rmse = np.sqrt(1/len(output_df) * np.sum(error_df.drop(columns=['time'])**2))
@@ -838,7 +617,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.xticks(rotation=90)
         plt.tight_layout()
         plt.grid()
-        plt.savefig(results_folder + '/rmse_best_weights.png')
+        plt.savefig(results_folder_opt + '/rmse_best_weights.png')
 
         # MAD (Mean Absolute Deviation) for each joint angle
         mad = 1/len(output_df) * np.sum(error_df.drop(columns=['time']).abs())
@@ -850,7 +629,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.xticks(rotation=90)
         plt.tight_layout()
         plt.grid()
-        plt.savefig(results_folder + '/mad_best_weights.png')
+        plt.savefig(results_folder_opt + '/mad_best_weights.png')
 
         # Plot also the difference in RoMd, RMSE and MAD between default weights and best weights
         rom_error_diff = rom_error_default - rom_error
@@ -860,11 +639,6 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         # delete the column where error is 0
         error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
         error_df['time'] = time_vector
-    
-        # Make a folder for the analytics 
-        results_folder = f'analytics_webcam/subject_{subject_ID}_trial_{trial_ID}'
-        if not os.path.exists(results_folder):
-            os.makedirs(results_folder)
         
 
         # Evaluation metrics 
@@ -881,7 +655,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.xticks(rotation=90)
         plt.tight_layout()
         plt.grid()
-        plt.savefig(results_folder + '/rom_error_difference.png')
+        plt.savefig(results_folder_opt + '/rom_error_difference.png')
 
         rmse_diff = rmse_default - rmse
         plt.figure(figsize=(10, 6))
@@ -892,7 +666,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.xticks(rotation=90)
         plt.tight_layout()
         plt.grid()
-        plt.savefig(results_folder + '/rmse_difference.png')
+        plt.savefig(results_folder_opt + '/rmse_difference.png')
 
         mad_diff = mad_default - mad
         plt.figure(figsize=(10, 6))
@@ -903,8 +677,8 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.xticks(rotation=90)
         plt.tight_layout()
         plt.grid()
-        plt.savefig(results_folder + '/mad_difference.png')
-        '''
+        plt.savefig(results_folder_opt + '/mad_difference.png')
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process subject data.")

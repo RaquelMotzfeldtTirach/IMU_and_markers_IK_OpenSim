@@ -49,6 +49,9 @@ class OpenSimSensorFusion:
         self.combinedMarkerWeights = None
         self.times = None 
         self.orientation_file = None  
+        self.is_imu_used = False
+        self.is_webcam_used = False
+        self.is_stereocamera_used = False
 
     def get_imu_data(self):
         # Convert IMU data
@@ -638,7 +641,7 @@ class OpenSimSensorFusion:
             print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
 
 
-def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
+def sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
     # Put log to level debug and show in terminal
     osim.Logger.setLevel(osim.Logger.Level_Info)
 
@@ -661,13 +664,12 @@ def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_v
 
     # Weights for sensor fusion are set by the weight tuning module
     # Webcam marker weight, IMU orientation weight, Stereocamera marker weight, Constraint variable
-    # Notes: for now changing weights within a single sensor works and changes the output, but changing weights between sensors does not seem to have an effect
     
     sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
 
-    is_webcam_used = max(webcam_weights) > 0  
-    is_imu_used = max(orientation_weights) > 0 
-    is_stereocamera_used = max(stereocamera_weights) > 0  
+    sensor_fusion.is_webcam_used = max(webcam_weights) > 0  
+    sensor_fusion.is_imu_used = max(orientation_weights) > 0 
+    sensor_fusion.is_stereocamera_used = max(stereocamera_weights) > 0  
 
     # Manual file downsampling and then reloading tables
     sensor_fusion.manual_downsampling()
@@ -679,9 +681,14 @@ def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_v
     # Correct IMU orientations
     sensor_fusion.heading_correction_imu_data(sensor_fusion.orientationQuatTable)
 
-   
+    return sensor_fusion
+
+def run_sensor_fusion(sensor_fusion, webcam_weights, orientation_weights, stereocamera_weights, constraint_var):
+    # Update weights in case they have changed
+    sensor_fusion.set_weights(webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
+
     # Load the orientation and marker references
-    sensor_fusion.load_references(is_webcam_used, is_imu_used, is_stereocamera_used)
+    sensor_fusion.load_references(sensor_fusion.is_webcam_used, sensor_fusion.is_imu_used, sensor_fusion.is_stereocamera_used)
     
 
     # Create the solver
@@ -721,10 +728,10 @@ def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_v
 
 
     ## For saving the results
-    directory = sensor_fusion.orientation_file.rpartition('/')[0] 
-    resultsDirectory = directory + '/' + sensor_fusion.resultsDirectory 
+    #directory = sensor_fusion.orientation_file.rpartition('/')[0] 
+    #resultsDirectory = directory + '/' + sensor_fusion.resultsDirectory 
     # Create results directory if it doesn't exist
-    os.makedirs(resultsDirectory, exist_ok=True) 
+    #os.makedirs(resultsDirectory, exist_ok=True) 
 
     # Create storage for results
     storage = osim.Storage() 
@@ -743,89 +750,23 @@ def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_v
         labels.append(coordSet.get(i).getName()) 
     storage.setColumnLabels(labels) 
 
-    ## For saving the errors
-    # Create storage objects for error tracking 
-    marker_errors_storage = None
-    orientation_errors_storage = None
-    combined_errors_storage = None
-    
-    # Initialize marker error storage if markers are used
-    if is_webcam_used or is_stereocamera_used:
-        marker_errors_storage = osim.Storage()
-        marker_errors_storage.setName("Model Marker Errors from IK")
-        marker_errors_storage.setInDegrees(False)  # Errors are in meters
-        
-        # Set column labels following OpenSim C++ pattern
-        marker_labels = osim.ArrayStr()
-        marker_labels.append("time")
-        marker_labels.append("webcam_total_squared_error")
-        marker_labels.append("webcam_error_RMS")
-        marker_labels.append("webcam_error_max")
-        marker_labels.append("stereocamera_total_squared_error")
-        marker_labels.append("stereocamera_error_RMS")
-        marker_labels.append("stereocamera_error_max")
-        
-        # Add individual marker error columns
-        for label in sensor_fusion.combined_marker_table.getColumnLabels():
-            marker_labels.append(f"{str(label)}_error")
-            
-        marker_errors_storage.setColumnLabels(marker_labels)
-        
-    # Initialize orientation error storage if orientations are used
-    if is_imu_used:
-        orientation_errors_storage = osim.Storage()
-        orientation_errors_storage.setName("Model Orientation Errors from IK")
-        orientation_errors_storage.setInDegrees(True)  # Convert radians to degrees
-        
-        # Set column labels
-        orient_labels = osim.ArrayStr()
-        orient_labels.append("time")
-        orient_labels.append("total_squared_error")
-        orient_labels.append("orientation_error_RMS")
-        orient_labels.append("orientation_error_max")
-        
-        # Add individual orientation error columns
-        for label in sensor_fusion.orientationLabels:
-            orient_labels.append(f"{str(label)}_error")
-            
-        orientation_errors_storage.setColumnLabels(orient_labels)
-    
-    # Initialize combined error storage
-    combined_errors_storage = osim.Storage()
-    combined_errors_storage.setName("Combined IK Errors")
-    combined_errors_storage.setInDegrees(False)
-    
-    combined_labels = osim.ArrayStr()
-    combined_labels.append("time")
-    combined_labels.append("total_cost")
-    combined_labels.append("webcam_total_squared_error")
-    combined_labels.append("stereocamera_total_squared_error")
-    combined_labels.append("orientation_total_squared_error")
-    combined_labels.append("webcam_rms_error")
-    combined_labels.append("webcam_max_error")
-    combined_labels.append("stereocamera_rms_error")
-    combined_labels.append("stereocamera_max_error")
-    combined_labels.append("orientation_rms_error_deg")
-    combined_labels.append("orientation_max_error_deg")
-    
-    combined_errors_storage.setColumnLabels(combined_labels)
 
     # Initialise nb of markers
-    if is_webcam_used and is_stereocamera_used:
+    if sensor_fusion.is_webcam_used and sensor_fusion.is_stereocamera_used:
         num_webcam_markers = len(sensor_fusion.webcam_weights)
         num_stereocamera_markers = len(sensor_fusion.stereocamera_weights) 
-    elif is_webcam_used and not is_stereocamera_used:
+    elif sensor_fusion.is_webcam_used and not sensor_fusion.is_stereocamera_used:
         num_webcam_markers = len(sensor_fusion.webcam_weights)
         num_stereocamera_markers = 0
-    elif not is_webcam_used and is_stereocamera_used:
+    elif not sensor_fusion.is_webcam_used and sensor_fusion.is_stereocamera_used:
         num_webcam_markers = 0
         num_stereocamera_markers = len(sensor_fusion.stereocamera_weights)
     else:
         num_webcam_markers = 0
         num_stereocamera_markers = 0
-    
-    # Intialise nb of orientationa
-    if is_imu_used:
+
+    # Intialise nb of orientations
+    if sensor_fusion.is_imu_used:
         num_orientations = len(sensor_fusion.orientation_weights)
     else:
         num_orientations = 0
@@ -859,147 +800,6 @@ def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_v
 
         # Track for this time step (assemble is called internally by track)
         ikSolver.track(sensor_fusion.s) 
-
-        # Initialise marker errors
-        webcam_total_squared_error = 0.0
-        webcam_rms = 0.0
-        webcam_max = 0.0
-        stereocamera_total_squared_error = 0.0
-        stereocamera_rms = 0.0
-        stereocamera_max = 0.0
-        individual_marker_errors = []
-        max_webcam_squared_error = 0.0
-        max_stereocamera_squared_error = 0.0
-
-        # Orientation errors
-        orientation_total_squared_error = 0.0
-        orientation_rms = 0.0
-        orientation_max = 0.0
-        individual_orientation_errors = []
-        max_squared_error = 0.0
-
-        if is_webcam_used or is_stereocamera_used:
-            try:
-                marker_errors = osim.SimTKArrayDouble()
-                ikSolver.computeCurrentSquaredMarkerErrors(marker_errors)
-                
-                if marker_errors.size() > 0:
-                    
-                    # Validate that we have enough error values for all markers
-                    expected_markers = num_webcam_markers + num_stereocamera_markers
-                    if marker_errors.size() < expected_markers:
-                        print(f"WARNING: Not enough marker errors! Expected {expected_markers}, got {marker_errors.size()}")
-                        # Adjust counts to prevent index out of bounds
-                        available_for_stereo = max(0, marker_errors.size() - num_webcam_markers)
-                        num_stereocamera_markers = min(num_stereocamera_markers, available_for_stereo)
-                    
-                    # Calculate statistics 
-                    for j in range(min(num_webcam_markers, marker_errors.size())):
-                        webcam_squared_error = marker_errors.getElt(j)
-                        # Check for invalid/extreme values
-                        if webcam_squared_error < 0 or webcam_squared_error > 1e6:  # 1 million square meters is extreme
-                            print(f"WARNING: Extreme webcam marker error at index {j}: {webcam_squared_error}")
-                            webcam_squared_error = min(webcam_squared_error, 1e6)  # Cap at reasonable value
-                        
-                        webcam_total_squared_error += webcam_squared_error
-                        individual_marker_errors.append(math.sqrt(webcam_squared_error))
-                        
-                        if webcam_squared_error > max_webcam_squared_error:
-                            max_webcam_squared_error = webcam_squared_error
-
-                    for j in range(num_webcam_markers, min(num_webcam_markers + num_stereocamera_markers, marker_errors.size())):
-                        stereocamera_squared_error = marker_errors.getElt(j)
-                        # Check for invalid/extreme values  
-                        if stereocamera_squared_error < 0 or stereocamera_squared_error > 1e6:  # 1 million square meters is extreme
-                            print(f"WARNING: Extreme stereocamera marker error at index {j}: {stereocamera_squared_error}")
-                            stereocamera_squared_error = min(stereocamera_squared_error, 1e6)  # Cap at reasonable value
-                            
-                        stereocamera_total_squared_error += stereocamera_squared_error
-                        individual_marker_errors.append(math.sqrt(stereocamera_squared_error))
-                        
-                        if stereocamera_squared_error > max_stereocamera_squared_error:
-                            max_stereocamera_squared_error = stereocamera_squared_error
-                    
-                    # Calculate actual number of markers processed for RMS calculation
-                    actual_webcam_markers = min(num_webcam_markers, marker_errors.size())
-                    actual_stereocamera_markers = min(num_stereocamera_markers, max(0, marker_errors.size() - num_webcam_markers))
-                    
-                    webcam_rms = math.sqrt(webcam_total_squared_error / actual_webcam_markers) if actual_webcam_markers > 0 else 0
-                    webcam_max = math.sqrt(max_webcam_squared_error)
-                    stereocamera_rms = math.sqrt(stereocamera_total_squared_error / actual_stereocamera_markers) if actual_stereocamera_markers > 0 else 0
-                    stereocamera_max = math.sqrt(max_stereocamera_squared_error)
-                    
-                    # Save marker error data
-                    if marker_errors_storage:
-                        marker_data = osim.ArrayDouble()
-                        marker_data.append(webcam_total_squared_error)
-                        marker_data.append(webcam_rms)
-                        marker_data.append(webcam_max)
-                        marker_data.append(stereocamera_total_squared_error)
-                        marker_data.append(stereocamera_rms)
-                        marker_data.append(stereocamera_max)
-
-                        # Add individual marker errors
-                        for error in individual_marker_errors:
-                            marker_data.append(error)
-                        
-                        marker_errors_storage.append(time_val, marker_data)
-                        
-            except Exception as e:
-                print(f"Warning: Could not compute marker errors at time {time_val}: {e}")
-        
-        
-        if is_imu_used:
-            try:
-                orientation_errors = osim.SimTKArrayDouble()
-                ikSolver.computeCurrentOrientationErrors(orientation_errors)
-                
-                if orientation_errors.size() > 0:
-                    # Calculate statistics
-                    for j in range(orientation_errors.size()):
-                        error = orientation_errors.getElt(j)
-                        squared_error = error * error
-                        orientation_total_squared_error += squared_error
-                        individual_orientation_errors.append(error)
-                        
-                        if squared_error > max_squared_error:
-                            max_squared_error = squared_error
-                    
-                    orientation_rms = math.sqrt(orientation_total_squared_error / num_orientations) if num_orientations > 0 else 0
-                    orientation_max = math.sqrt(max_squared_error)
-                    
-                    # Save orientation error data
-                    if orientation_errors_storage:
-                        orient_data = osim.ArrayDouble()
-                        orient_data.append(orientation_total_squared_error)
-                        orient_data.append(orientation_rms * 180.0 / pi)  # Convert to degrees
-                        orient_data.append(orientation_max * 180.0 / pi)  # Convert to degrees
-                        
-                        # Add individual orientation errors (in degrees)
-                        for error in individual_orientation_errors:
-                            orient_data.append(error * 180.0 / pi)
-                            
-                        orientation_errors_storage.append(time_val, orient_data)
-                        
-            except Exception as e:
-                print(f"Warning: Could not compute orientation errors at time {time_val}: {e}")
-        
-        # Combined errors
-        total_cost = webcam_total_squared_error + orientation_total_squared_error + stereocamera_total_squared_error
-        
-        combined_data = osim.ArrayDouble()
-        combined_data.append(total_cost)
-        combined_data.append(webcam_total_squared_error)
-        combined_data.append(stereocamera_total_squared_error)
-        combined_data.append(orientation_total_squared_error)
-        combined_data.append(webcam_rms)
-        combined_data.append(webcam_max)
-        combined_data.append(stereocamera_rms)
-        combined_data.append(stereocamera_max)
-        combined_data.append(orientation_rms * 180.0 / pi if orientation_rms > 0 else 0.0)  # Convert to degrees
-        combined_data.append(orientation_max * 180.0 / pi if orientation_max > 0 else 0.0)  # Convert to degrees
-        
-        combined_errors_storage.append(time_val, combined_data)
         
         # Get coordinate values from the state and convert rotational coordinates to degrees
         coordValues = osim.Vector(numCoords, 0.0)   # Initialize with size and default value
@@ -1022,62 +822,11 @@ def main(webcam_weights, orientation_weights, stereocamera_weights, constraint_v
     elapsed_time = end_time - start_time 
     print(f"IK processing completed for {numTimeSteps} frames in {elapsed_time:.2f} seconds.")
     
-    # Save all error files (following OpenSim C++ pattern)
-    trial_name = f"subject{sensor_fusion.subject_ID}_{sensor_fusion.trial_ID}"
-    
-    try:
-        # Save marker errors
-        if marker_errors_storage and (is_webcam_used or is_stereocamera_used):
-            marker_filename = f"{trial_name}_ik_marker_errors"
-            osim.Storage.printResult(marker_errors_storage, marker_filename, resultsDirectory, -1, ".mot")
-            print(f"✓ Saved marker errors to: {resultsDirectory}/{marker_filename}.mot")
-        
-        # Save orientation errors  
-        if orientation_errors_storage and is_imu_used:
-            orientation_filename = f"{trial_name}_ik_orientation_errors"
-            osim.Storage.printResult(orientation_errors_storage, orientation_filename, resultsDirectory, -1, ".mot")
-            print(f"✓ Saved orientation errors to: {resultsDirectory}/{orientation_filename}.mot")
-        
-        # Save combined errors
-        combined_filename = f"{trial_name}_ik_combined_errors"
-        osim.Storage.printResult(combined_errors_storage, combined_filename, resultsDirectory, -1, ".mot")
-        print(f"✓ Saved combined errors to: {resultsDirectory}/{combined_filename}.mot")
-        
-        # Print summary statistics (following OpenSim C++ logging pattern)
-        
-        if (is_webcam_used or is_stereocamera_used ):
-            # Use the counts from the sensor fusion object, not the potentially undefined local variables
-            total_markers = len(sensor_fusion.webcam_weights) + len(sensor_fusion.stereocamera_weights)
-            print(f"\n=== FINAL ERROR SUMMARY ===")
-            print(f"Total markers: {total_markers} ({len(sensor_fusion.webcam_weights)} webcam + {len(sensor_fusion.stereocamera_weights)} stereocamera)")
-            print(f"  - Final webcam RMS error: {webcam_rms:.6f} m")
-            print(f"  - Final webcam max error: {webcam_max:.6f} m")
-            print(f"  - Total webcam squared error: {webcam_total_squared_error:.8f}")
-            print(f"  - Final stereocamera RMS error: {stereocamera_rms:.6f} m")
-            print(f"  - Final stereocamera max error: {stereocamera_max:.6f} m")
-            print(f"  - Total stereocamera squared error: {stereocamera_total_squared_error:.8f}")
-
-        if is_imu_used:
-            print(f"Orientations: {num_orientations} tracked")  
-            print(f"  - Final RMS error: {orientation_rms*180/pi:.4f}°")
-            print(f"  - Final max error: {orientation_max*180/pi:.4f}°")
-            print(f"  - Total squared error: {orientation_total_squared_error:.8f}")
-            
-        print(f"Total final cost: {total_cost:.8f}")
-        print("="*60)
-        
-    except Exception as e:
-        print(f"Error saving error files: {e}")
-
-    # Save main results as .mot file
-    motFileName = resultsDirectory + "/inverse_kinematics_results_subject_"+str(sensor_fusion.subject_ID)+"_trial_"+str(sensor_fusion.trial_ID)+".mot"
-    storage.printResult(storage, "inverse_kinematics_results_subject_"+str(sensor_fusion.subject_ID)+"_trial_"+str(sensor_fusion.trial_ID), resultsDirectory, -1, ".mot")
-    print(f"Results saved to: {motFileName}")
     
     print("Script execution completed successfully.")
 
     
-    return motFileName
+    return storage
 
 
 
@@ -1096,4 +845,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.subject_ID, args.trial_ID, args.webcam_weights, args.orientation_weights, args.stereocamera_weights, args.constraint_var, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex)
+    fusion = sensor_fusion_initialization(args.webcam_weights, args.orientation_weights, args.stereocamera_weights, args.constraint_var, args.subject_ID, args.trial_ID, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex)
+    storage = run_sensor_fusion(fusion, args.webcam_weights, args.orientation_weights, args.stereocamera_weights, args.constraint_var)
+
+    ## For saving the results
+    directory = fusion.orientation_file.rpartition('/')[0] 
+    resultsDirectory = directory + '/' + fusion.resultsDirectory 
+    # Create results directory if it doesn't exist
+    os.makedirs(resultsDirectory, exist_ok=True) 
+
+    # Save main results as .mot file
+    motFileName = resultsDirectory + "/inverse_kinematics_results_subject_"+str(fusion.subject_ID)+"_trial_"+str(fusion.trial_ID)+".mot"
+    storage.printResult(storage, "inverse_kinematics_results_subject_"+str(fusion.subject_ID)+"_trial_"+str(fusion.trial_ID), resultsDirectory, -1, ".mot")
+    print(f"Results saved to: {motFileName}")
