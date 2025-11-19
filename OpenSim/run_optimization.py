@@ -64,9 +64,9 @@ def main(ID):
     print("lags: ", lags)
 
     # Run optimization for each trial
-    
-    # TODO: should devide the IK in two parts: preparing everything -> only once before optuna, updating the weights and runing the IK -> many times with optuna and parallel computing! 
-    # TODO: devide the jobs between only imu, with webcam and with stereocamera
+
+    # TODO: should devide the IK in two parts: preparing everything -> only once before optuna, updating the weights and runing the IK -> many times with optuna and parallel computing! => TO BE TESTED!!!!
+    # TODO: devide the jobs between only imu, with webcam and with stereocamera (and analytics should have their own folders)
     # TODO: save the raw data in a raw_data folder to always be able to retrieve it, untouchged 
     # TODO: store the results and show the metrics and weights, etc in a nice way! jupiter notebook maybe :) 
     # TODO: think about metrics and optimization equation: RMSE, MAE, R2, etc

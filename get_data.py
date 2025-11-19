@@ -10,6 +10,7 @@ def get_data(ID):
         subject_id = ID
     else:
         subject_id = input("Enter the subject ID (e.g., '29'): ")
+
     # Make folder in recordings if it doesn't exist
     subject_folder = f"recordings/subject{subject_id}"
     if not os.path.exists(subject_folder):
@@ -74,6 +75,24 @@ def get_data(ID):
         print(f"Copied IMU contents from {imu_path} to {imu_dst}")
     else:
         print(f"IMU source folder doesn't exist: {imu_path}")
+
+    # Copy subject content into raw_data folder
+    for item in os.listdir(subject_folder):
+        if item != "raw_data":
+            s = os.path.join(subject_folder, item)
+            d = os.path.join(raw_data_folder, item)
+            if os.path.isdir(s):
+                if not os.path.exists(d):
+                    shutil.copytree(s, d)
+                    print(f"Copied directory {s} to {d}")
+                else:
+                    print(f"Directory already exists: {d}")
+            else:
+                if not os.path.exists(d):
+                    shutil.copy2(s, d)
+                    print(f"Copied file {s} to {d}")
+                else:
+                    print(f"File already exists: {d}")
 
     
 

@@ -9,5 +9,3 @@ Calibrated_Rajagopal_*
 # Ignore recordings directory
 recordings/
 analytics/
-analytics_all/
-analytics_imu_only/
