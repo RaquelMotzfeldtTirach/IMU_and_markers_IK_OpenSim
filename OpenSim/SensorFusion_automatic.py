@@ -182,7 +182,7 @@ class OpenSimSensorFusion:
             # first calibrate model with stereocamera data
             calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
             # then add webcam markers (new placement) to model
-            calibrated_model_path = model_add_markers(calibrated_model_path, marker_file=webcam_markers_scaled) 
+            calibrated_model_path = model_add_markers(calibrated_model_path, webcam_markers_scaled) 
 
         # IMU calibration
         if (max(self.orientation_weights) > 0):
