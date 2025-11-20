@@ -615,7 +615,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         nb_trials = 500 #TODO: CHANGE DEPENDING ON THE COMPUTE POWER
 
         # Make a folder for the analytics 
-        results_folder_opt = f'analytics/subject_{subject_ID}/{trial_ID}/optimization/{nb_trials}/'
+        results_folder_opt = f'analytics/subject_{subject_ID}/{trial_ID}/optimization_not_parallel/{nb_trials}/'
         if not os.path.exists(results_folder_opt):
             os.makedirs(results_folder_opt)
         
@@ -632,7 +632,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
         study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_only(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=12)
+        study.optimize(lambda trial: objective_imu_only(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=1)
 
 
         # Save best trial data in a file 
@@ -763,7 +763,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
         study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_webcam(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=12)
+        study.optimize(lambda trial: objective_imu_webcam(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=1)
 
         # Save best trial data in a file 
         file_name = "optuna_results_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
@@ -893,7 +893,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
         study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_stereocamera(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=12)
+        study.optimize(lambda trial: objective_imu_stereocamera(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=1)
 
 
         # Save best trial data in a file 

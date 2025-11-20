@@ -114,60 +114,99 @@ def create_mixed_model(output_model_file_scaling, output_model_file_markers, out
     tree.write(output_model_file, encoding='utf-8', xml_declaration=True)
 
 
-def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_sex, model_path):
+def main(subject_ID, mvt_ID, subject_mass, subject_height, subject_age, subject_sex, model_path, just_for_markers=False):
     """Main entry point of the script."""
-    config_template_path = 'OpenSim/scaling_setup_template_webcam.xml'
+    if just_for_markers == False:
+        config_template_path = 'OpenSim/scaling_setup_template_webcam.xml'
 
-    # Load the model
-    model = load_model(model_path)
+        # Load the model
+        model = load_model(model_path)
 
-    # Define paths
-    static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
-    output_model_file = "OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
-    output_model_file_scaling = "../../OpenSim/Models/Rajagopal/Scaled_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
-    output_model_file_markers = "OpenSim/Models/Rajagopal/Marker_Placed_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+        # Define paths
+        static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
+        output_model_file = "OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+        output_model_file_scaling = "../../OpenSim/Models/Rajagopal/Scaled_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+        output_model_file_markers = "OpenSim/Models/Rajagopal/Marker_Placed_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
 
-    # Define initial time for static trial
-    # read the .trc file to get the initial time
-    with open(static_trial_path.removeprefix("../../"), 'r') as f:
-        lines = f.readlines()
-        initial_time = float(lines[6].strip().split()[1])  # Assuming time is the 6th row, second column
-    print("Initial time of the static trial:", initial_time)
+        # Define initial time for static trial
+        # read the .trc file to get the initial time
+        with open(static_trial_path.removeprefix("../../"), 'r') as f:
+            lines = f.readlines()
+            initial_time = float(lines[6].strip().split()[1])  # Assuming time is the 6th row, second column
+        print("Initial time of the static trial:", initial_time)
 
-    # Create our own config file
-    config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time)
-    print("Configuration file created at:", config_path)
+        # Create our own config file
+        config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time)
+        print("Configuration file created at:", config_path)
 
-    # Create and configure the Scale Tool
-    scale_tool = create_scale_tool(config_path)
+        # Create and configure the Scale Tool
+        scale_tool = create_scale_tool(config_path)
 
-    # Print Scale Tool information
-    print_scale_tool_info(scale_tool)
+        # Print Scale Tool information
+        print_scale_tool_info(scale_tool)
 
-    # Print Marker file names
-    print_marker_file_names(scale_tool)
+        # Print Marker file names
+        print_marker_file_names(scale_tool)
 
-    # Run the Scale Tool
-    run_scaling(scale_tool)
+        # Run the Scale Tool
+        run_scaling(scale_tool)
 
 
-    # Get the model with the markers placed
-    #new_model = scale_tool.createModel()
-    # Save the new model to a file
-    #new_model.printToXML(output_model_file_markers)
+        # Get the model with the markers placed
+        #new_model = scale_tool.createModel()
+        # Save the new model to a file
+        #new_model.printToXML(output_model_file_markers)
 
-    # Mix both scaled and marker placed models into one
-    #create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file)
+        # Mix both scaled and marker placed models into one
+        #create_mixed_model(output_model_file_scaling, output_model_file_markers, output_model_file)
 
-    # Delete intermediate files
-    #if os.path.exists(output_model_file_scaling.removeprefix("../../")):
-    #    os.remove(output_model_file_scaling.removeprefix("../../"))
-    #if os.path.exists(output_model_file_markers):
-    #    os.remove(output_model_file_markers)
+        # Delete intermediate files
+        #if os.path.exists(output_model_file_scaling.removeprefix("../../")):
+        #    os.remove(output_model_file_scaling.removeprefix("../../"))
+        #if os.path.exists(output_model_file_markers):
+        #    os.remove(output_model_file_markers)
 
-    return output_model_file
+        return output_model_file
+    else:
+        config_template_path = 'OpenSim/scaling_setup_template_webcam.xml'
 
-    
+        # Load the model
+        model = load_model(model_path)
+
+        # Define paths
+        static_trial_path = "../../recordings/subject" + subject_ID + "/webcam_static.trc"
+        output_model_file = "OpenSim/Models/Rajagopal/Unused_Calibrated_Rajagopal_subject" + subject_ID + "_" + mvt_ID + ".osim"
+
+        # Define initial time for static trial
+        # read the .trc file to get the initial time
+        with open(static_trial_path.removeprefix("../../"), 'r') as f:
+            lines = f.readlines()
+            initial_time = float(lines[6].strip().split()[1])  # Assuming time is the 6th row, second column
+        print("Initial time of the static trial:", initial_time)
+
+        # Create our own config file
+        config_path = create_config_file(config_template_path, subject_ID, subject_mass, subject_height, subject_sex, subject_age, static_trial_path, output_model_file, mvt_ID, model_path, initial_time)
+        print("Configuration file created at:", config_path)
+
+        # Create and configure the Scale Tool
+        scale_tool = create_scale_tool(config_path)
+
+        # Print Scale Tool information
+        print_scale_tool_info(scale_tool)
+
+        # Print Marker file names
+        print_marker_file_names(scale_tool)
+
+        # Run the Scale Tool
+        run_scaling(scale_tool)
+
+        model = load_model(output_model_file)
+
+        #Make marker file 
+        output_marker_file = f"OpenSim/Models/Rajagopal/webcam_markers_subject_{subject_ID}_trial_{mvt_ID}.xml"
+        model.writeMarkerFile(output_marker_file)
+
+        return output_marker_file
 
 if __name__ == "__main__":
     # Argparse 
@@ -179,6 +218,7 @@ if __name__ == "__main__":
     parser.add_argument('subject_age', type=str, help='Subject age in years')
     parser.add_argument('subject_sex', type=str, help='Subject sex (M/F)')
     parser.add_argument('model_path', type=str, help='Path to the OpenSim model file')
+    parser.add_argument('--just_for_markers', type=bool, help='If set, only create markers without scaling')
     args = parser.parse_args()
 
-    main(args.subject_ID, args.mvt_ID, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex, args.model_path)
+    main(args.subject_ID, args.mvt_ID, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex, args.model_path, args.just_for_markers)

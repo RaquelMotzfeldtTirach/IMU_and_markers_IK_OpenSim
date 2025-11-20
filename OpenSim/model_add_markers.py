@@ -11,9 +11,8 @@ def load_model(model_path):
     return model
 
 
-def main(model_path, camera_type):
+def main(model_path, markers_file):
     """Main entry point of the script."""
-    markers_file = "OpenSim/Models/Rajagopal/"+ camera_type +"_markers.xml"
 
     # Load the model
     model = load_model(model_path)
@@ -42,7 +41,7 @@ if __name__ == "__main__":
     # Argparse 
     parser = argparse.ArgumentParser(description='Add markers to model')
     parser.add_argument('model_path', type=str, help='Path to the OpenSim model file')
-    parser.add_argument('camera_type', type=str, help='is it webcam or stereocamera markers?')
+    parser.add_argument('marker_file', type=str, help='Path to the marker file')
     args = parser.parse_args()
 
-    main(args.model_path, args.camera_type)
+    main(args.model_path, args.marker_file)

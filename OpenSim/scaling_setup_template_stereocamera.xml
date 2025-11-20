@@ -16,7 +16,7 @@
 			<!--Model file (.osim) for the unscaled model.-->
 			<model_file>../../OpenSim/Models/Rajagopal/Rajagopal_2015.osim</model_file>
 			<!--Set of model markers used to scale the model. Scaling is done based on distances between model markers compared to the same distances between the corresponding experimental markers.-->
-			<marker_set_file>../../OpenSim/Models/Rajagopal/webcam_markers.xml</marker_set_file>
+			<marker_set_file>../../OpenSim/Models/Rajagopal/stereocamera_markers.xml</marker_set_file>
 		</GenericModelMaker>
 		<!--Specifies parameters for scaling the model.-->
 		<ModelScaler>
