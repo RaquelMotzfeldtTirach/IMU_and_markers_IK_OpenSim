@@ -223,13 +223,13 @@
 				<objects>
 					<IKMarkerTask name="WEBCAM_JOINT_RIGHT_SHOULDER">
 						<!--Whether or not this task will be used during inverse kinematics solve, default is true.-->
-						<apply>true</apply>
+						<apply>false</apply>
 						<!--Weight given to the task when solving inverse kinematics problems, default is 0.-->
 						<weight>1</weight>
 					</IKMarkerTask>
 					<IKMarkerTask name="WEBCAM_JOINT_LEFT_SHOULDER">
 						<!--Whether or not this task will be used during inverse kinematics solve, default is true.-->
-						<apply>true</apply>
+						<apply>false</apply>
 						<!--Weight given to the task when solving inverse kinematics problems, default is 0.-->
 						<weight>1</weight>
 					</IKMarkerTask>

@@ -67,11 +67,20 @@ def read_vicon_trc_file(file_path):
         # Columns
         columns = ['Time', 'Clap0_x', 'Clap0_y', 'Clap0_z', 'ClapX_x', 'ClapX_y', 'ClapX_z', 'ClapY_x', 'ClapY_y', 'ClapY_z']
 
+        # Function to safely convert string to float
+        def safe_float(array, index):
+            try: 
+                value = array[index]
+                return float(value) if value else None  # or replace None with 0.0 if you prefer that
+            except: 
+                return None
+
+
         # Only clap data 
         for line in datalines:
             # slit by tab
             split_line = line.strip().split('\t')
-            data.append([float(split_line[0]), float(split_line[70]), float(split_line[71]), float(split_line[72]), float(split_line[73]), float(split_line[74]), float(split_line[75]), float(split_line[76]), float(split_line[77]), float(split_line[78])])
+            data.append([safe_float(split_line, 0), safe_float(split_line, 70), safe_float(split_line, 71), safe_float(split_line, 72), safe_float(split_line, 73), safe_float(split_line, 74), safe_float(split_line, 75), safe_float(split_line,76), safe_float(split_line,77), safe_float(split_line,78)])
 
         df = pd.DataFrame(data, columns=columns)
 
@@ -104,8 +113,12 @@ def find_clap(df, min_common):
         print("Largest spikes: ", largest_spikes.values)
         
         # Calculate the median of these spikes if there are multiple
-        median_spike = np.median(largest_spikes.values)
-        print("Median largest spikes: ", median_spike)
+        if len(largest_spikes.values) > 2:
+            median_spike = int(np.median(largest_spikes.values))
+            print("Median largest spikes: ", median_spike)
+        else: #take the smaller index
+            median_spike = min(largest_spikes.values)
+            print("Closest largest spikes: ", median_spike)
 
         return median_spike
     else:
@@ -116,8 +129,12 @@ def find_clap(df, min_common):
         print("Largest spikes: ", largest_spikes.values)
         
         # Calculate the median of these spikes if there are multiple
-        median_spike = np.median(largest_spikes.values)
-        print("Median largest spikes: ", median_spike)
+        if len(largest_spikes.values) > 2:
+            median_spike = int(np.median(largest_spikes.values))
+            print("Median largest spikes: ", median_spike)
+        else: #take the smaller index
+            median_spike = min(largest_spikes.values)
+            print("Closest largest spikes: ", median_spike)
 
         return median_spike
 

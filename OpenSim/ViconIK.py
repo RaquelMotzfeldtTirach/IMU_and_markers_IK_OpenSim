@@ -10,6 +10,8 @@ import time
 from modelScalingVicon import main as model_scaling_vicon
 from vicon_ref_frame_correction import main as correct_vicon_ref_frame
 
+from TRCcorrector import main as trc_correction
+
 class OpenSimVicon:
     def __init__(self, model_path, model_name, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
         self.model_path = model_path
@@ -37,6 +39,9 @@ class OpenSimVicon:
             self.viconMarkersFileName = vicon_path
         else:
             self.viconMarkersFileName = "recordings/subject" + str(self.subject_ID) + "/vicon_" + str(self.trial_ID) + ".trc"
+
+        # Correct NaN data 
+        trc_correction(self.viconMarkersFileName)
 
         # Load marker data 
         self.viconMarkerTable = osim.TimeSeriesTableVec3(self.viconMarkersFileName)
