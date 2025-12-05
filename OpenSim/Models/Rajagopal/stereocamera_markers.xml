@@ -78,7 +78,7 @@
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
 				<socket_parent_frame>/bodyset/torso</socket_parent_frame>
 				<!--The fixed location of the station expressed in its parent frame.-->
-				<location>-0.093022699381133014 0.37176235284209197 -0.0020225166609521743</location>
+				<location>0.0180270889668422 0.25056279713465818 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
 				<fixed>false</fixed>
 			</Marker>
@@ -86,7 +86,7 @@
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
 				<socket_parent_frame>/bodyset/torso</socket_parent_frame>
 				<!--The fixed location of the station expressed in its parent frame.-->
-				<location>-0.093022699381133014 0.26516086564686486 -0.0020225166609521743</location>
+				<location>0.019929653483253956 0.10062016192142857 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
 				<fixed>false</fixed>
 			</Marker>
@@ -94,7 +94,7 @@
 				<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The frame to which this station is fixed.).-->
 				<socket_parent_frame>/bodyset/torso</socket_parent_frame>
 				<!--The fixed location of the station expressed in its parent frame.-->
-				<location>-0.093022699381133014 0.15219836132987427 -0.0020225166609521743</location>
+				<location>0.030781091495139547 -0.026920356416630171 -0.0020225166609521743</location>
 				<!--Flag (true or false) specifying whether the marker is fixed in its parent frame during the marker placement step of scaling.  If false, the marker is free to move within its parent Frame to match its experimental counterpart.-->
 				<fixed>false</fixed>
 			</Marker>
