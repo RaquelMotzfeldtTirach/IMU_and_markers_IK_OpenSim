@@ -13,6 +13,20 @@ from scipy.stats import pearsonr
 import argparse
 from optuna.samplers import TPESampler
 
+target_joints_per_trial = {
+    "shoulder_flex_ext": ["arm_flex_r", "arm_flex_l"],
+    "shoulder_abd_add": ["arm_add_r", "arm_add_l"],
+    "shoulder_rot": ["arm_rot_r", "arm_rot_l"],
+    "elbow_flex_ext": ["elbow_flex_r", "elbow_flex_l"],
+    "elbow_pro_sup": ["pro_sup_r", "pro_sup_l"],
+    "wrist_flex_ext": ["wrist_flex_r", "wrist_flex_l"],
+    "lumbar_flex_ext": ["lumbar_extension"],
+    "lumbar_lat": ["lumbar_bending"],
+    "drinking": ["arm_flex_r", "arm_flex_l", "arm_add_r", "arm_add_l", "arm_rot_r", "arm_rot_l", "elbow_flex_r", "elbow_flex_l", "pro_sup_r", "pro_sup_l", "wrist_flex_r", "wrist_flex_l", "lumbar_extension", "lumbar_bending"],
+    "finger_nose":["arm_flex_r", "arm_flex_l", "arm_add_r", "arm_add_l", "arm_rot_r", "arm_rot_l", "elbow_flex_r", "elbow_flex_l", "pro_sup_r", "pro_sup_l", "wrist_flex_r", "wrist_flex_l", "lumbar_extension", "lumbar_bending"],
+    "clapping": ["arm_flex_r", "arm_flex_l", "arm_add_r", "arm_add_l", "arm_rot_r", "arm_rot_l", "elbow_flex_r", "elbow_flex_l", "pro_sup_r", "pro_sup_l", "wrist_flex_r", "wrist_flex_l", "lumbar_extension", "lumbar_bending"]
+    }
+
 def standardize_df(df, exclude_cols=None, return_stats=False):
     """
     Standardize DataFrame columns: (x - mean) / std per column.
@@ -148,6 +162,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
             scaled = scaled * (-1) + 1
         return scaled
 
+    '''
     # Plot to verify, normalized for better visualisation
     imu_plot = [ (q[1] if (hasattr(q, '__len__') and len(q) > 1) else np.nan) for q in humerus_l_imu_quat ]
     imu_plot = safe_normalize(imu_plot)
@@ -221,7 +236,7 @@ def apply_lag_correction(vicon_df, best_lag, imu_df, subject_ID, trial_ID, heade
     plt.legend()
     plt.tight_layout()
     #plt.show()
-    
+    '''
 
     #confirmed = input("Are you satisfied with the time correction? (y/n): ")
     confirmed = 'y'  # for now, assume user is satisfied
@@ -392,7 +407,7 @@ def downsample(groundtruth_df, time_vector): #TODO: check that this is working
 def objective_imu_only(sensor_fusion, trial, ground_truth_df, constraint_var, subject_ID, trial_ID):
     # Define weight parameters to optimize
     webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
-    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
+    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 1) for i in range(8)]  # Example: 8 orientation weights
     stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
 
     # Run IK with updated weights
@@ -408,6 +423,7 @@ def objective_imu_only(sensor_fusion, trial, ground_truth_df, constraint_var, su
         # Downsample ground truth to match the time vector of the latest IK results
         time_vector = latest_ik_results_df['time'].values
         ground_truth_df = downsample(ground_truth_df, time_vector)
+        # DATAFRAME downsample groundtruth df to match time vector of latest_ik_results_df # TODO!!!
 
         # Compare with ground truth
         error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
@@ -415,8 +431,12 @@ def objective_imu_only(sensor_fusion, trial, ground_truth_df, constraint_var, su
         # Calculate the RMSE
         rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
-        # Sum up the RMSE values
-        total = rmse.sum(axis=0)
+        # Sum up the RMSE values only for the joints of interest
+        joints_of_interest = target_joints_per_trial[trial_ID]
+        #total = rmse.sum(axis=0)
+        total = 0 
+        for joint in joints_of_interest:
+            total = total + rmse[joint]
 
         # Delete the output file to save space
         os.remove(output)
@@ -431,8 +451,8 @@ def objective_imu_only(sensor_fusion, trial, ground_truth_df, constraint_var, su
 
 def objective_imu_webcam(sensor_fusion, trial, ground_truth_df, constraint_var, subject_ID, trial_ID):
     # Define weight parameters to optimize
-    webcam_weights = [trial.suggest_int(f'webcam_weight_{i}', 0, 10) for i in range(12)]  # Example: 12 webcam weights
-    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
+    webcam_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # webcam weights
+    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 1) for i in range(8)]  # Example: 8 orientation weights
     stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
 
     # Run IK with updated weights
@@ -456,7 +476,12 @@ def objective_imu_webcam(sensor_fusion, trial, ground_truth_df, constraint_var, 
         rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
         # Sum up the RMSE values
-        total = rmse.sum(axis=0)
+        # Sum up the RMSE values only for the joints of interest
+        joints_of_interest = target_joints_per_trial[trial_ID]
+        #total = rmse.sum(axis=0)
+        total = 0 
+        for joint in joints_of_interest:
+            total = total + rmse[joint]
 
         # Delete the output file to save space
         os.remove(output)
@@ -471,8 +496,8 @@ def objective_imu_webcam(sensor_fusion, trial, ground_truth_df, constraint_var, 
 def objective_imu_stereocamera(sensor_fusion, trial, ground_truth_df, constraint_var, subject_ID, trial_ID):
     # Define weight parameters to optimize
     webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Example: 12 webcam weights
-    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 10) for i in range(8)]  # Example: 8 orientation weights
-    stereocamera_weights = [trial.suggest_int(f'stereocamera_weight_{i}', 0, 10) for i in range(15)]  # Example: 15 stereocamera weights
+    orientation_weights = [trial.suggest_int(f'orientation_weight_{i}', 0, 1) for i in range(8)]  # Example: 8 orientation weights
+    stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # Example: 15 stereocamera weights
 
     # Run IK with updated weights
     try:
@@ -495,7 +520,12 @@ def objective_imu_stereocamera(sensor_fusion, trial, ground_truth_df, constraint
         rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
         # Sum up the RMSE values
-        total = rmse.sum(axis=0)
+        # Sum up the RMSE values only for the joints of interest
+        joints_of_interest = target_joints_per_trial[trial_ID]
+        #total = rmse.sum(axis=0)
+        total = 0 
+        for joint in joints_of_interest:
+            total = total + rmse[joint]
 
         # Delete the output file to save space
         os.remove(output)
@@ -515,7 +545,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     # ORIENTATION WEIGHTS: torso, pelvis, upper right, lower right, upper left, lower left, hand right, hand left
     # STEREOCAMERA WEIGHTS: neck, right clavicle, left clavicle, right shoulder, left shoulder, right elbow, left elbow, left wrist, right wrist, spine 3, spine 2, spine 1, pelvis, right hip, left hip
 
-    constraint_var = 1000
+    constraint_var = 9000
 
     # Sensor fusion result with default weights
     webcam_weights = [1.0] * 12
@@ -561,7 +591,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
     # Downsample ground truth to match the time vector of the latest IK results
     time_vector = latest_ik_results_df['time'].values.tolist()
-    ground_truth_df = downsample(ground_truth_df, time_vector)
+    ground_truth_df = downsample(ground_truth_df, time_vector)  ## TODO!!
 
 
     ## ANALYTICS - Default weights
@@ -570,7 +600,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     # delete the column where error is 0
     error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
     error_df['time'] = time_vector
-   
+
     # Evaluation metrics 
     # Range of Motion and difference in RoM between vicon and sensor fusion
     rom_vicon_default = ground_truth_df.max() - ground_truth_df.min()
@@ -609,13 +639,14 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
     plt.tight_layout()
     plt.grid()
     plt.savefig(results_folder_default + '/mad_default_weights.png')
+    
 
     if optimization: 
         # Number of trials for optimization
-        nb_trials = 400 #TODO: CHANGE DEPENDING ON THE COMPUTE POWER
+        nb_trials = 300 #TODO: CHANGE DEPENDING ON THE COMPUTE POWER
 
         # Make a folder for the analytics 
-        results_folder_opt = f'analytics/subject_{subject_ID}/{trial_ID}/optimization/{nb_trials}/'
+        results_folder_opt = f'analytics/subject_{subject_ID}/{trial_ID}/optimization/grid_search/'
         if not os.path.exists(results_folder_opt):
             os.makedirs(results_folder_opt)
         
@@ -630,9 +661,16 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         # Optimization setup
         study_name = "imu_only_weights_tuning_study_" + subject_ID + "_" + trial_ID + "_" + str(nb_trials)
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
-        study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
+        #study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
+        search_space = {}
+        for i in range(8):
+            search_space[f"orientation_weight_{i}"] = (0, 1)
+        print("SEARCH_SPACE:", search_space)
+        study = optuna.create_study(direction='minimize', sampler=optuna.samplers.GridSampler(search_space))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_only(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=10)
+        #study.optimize(lambda trial: objective_imu_only(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=10)
+        study.optimize(lambda trial: objective_imu_only(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_jobs=1)
+
 
 
         # Save best trial data in a file 
@@ -645,6 +683,48 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
             f.write("\nBest trial value: " + str(study.best_value) + "\n")
             f.write("\nNumber of trials: " + str(len(study.trials)) + "\n")
         print(f"Results saved to {file_name}")
+
+        # Extract parameters for plotting
+        trials_data = []
+
+        for trial in study.trials:
+            trial_data = {"number": trial.number, "value": trial.value}
+            # Assuming your parameters are named 'orientation_weight_0', 'orientation_weight_1', ..., 'orientation_weight_7'
+            for key in sorted(trial.params.keys()):
+                trial_data[key] = trial.params[key]
+            trials_data.append(trial_data)
+
+        # Create a DataFrame for easier plotting
+        df_trials = pd.DataFrame(trials_data)
+
+        # Save the trial data to CSV
+        csv_file_name = os.path.join(results_folder_opt_imu, 'trial_data.csv')
+        df_trials.to_csv(csv_file_name, index=False)
+        print(f"Trial data saved to: {csv_file_name}")
+
+        # Set the trial number as index (optional)
+        df_trials.set_index('number', inplace=True)
+
+        # Plotting with 8 subplots for each orientation weight
+        n_params = 8  # Assuming there are 8 orientation weights
+        fig, axes = plt.subplots(n_params, 1, figsize=(12, 6), sharex=True)
+
+        # Plot each parameter in a separate subplot
+        for i in range(n_params):
+            param_key = f'orientation_weight_{i}'
+            if param_key in df_trials.columns:
+                axes[i].plot(df_trials.index, df_trials[param_key], label=param_key)
+                axes[i].set_title(param_key)
+                axes[i].set_ylabel('Value')
+                axes[i].grid()
+                axes[i].legend()
+
+        axes[-1].set_xlabel('Trial Number')  # Label the x-axis for the last subplot
+        plt.tight_layout()
+
+        # Save the subplot figure
+        plot_file_name = os.path.join(results_folder_opt_imu, 'parameter_evolution_subplots.png')
+        plt.savefig(plot_file_name)
 
         # Run sensor fusion with best weights
         best_params = study.best_params
@@ -760,10 +840,15 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
             os.makedirs(results_folder_opt_webcam)
         # Optimization setup
         study_name = "imu_webcam_weights_tuning_study_" + subject_ID + "_" + trial_ID + "_" + str(nb_trials)
+        search_space = {}
+        for i in range(8):
+            search_space[f"orientation_weight_{i}"] = (0, 1)
+        print("SEARCH_SPACE:", search_space)
+        study = optuna.create_study(direction='minimize', sampler=optuna.samplers.GridSampler(search_space))
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
-        study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
+        #study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_webcam(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=10)
+        study.optimize(lambda trial: objective_imu_webcam(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_jobs=1)
 
         # Save best trial data in a file 
         file_name = "optuna_results_subject_" + subject_ID + "_trial_" + trial_ID + ".txt"
@@ -776,10 +861,53 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
             f.write("\nNumber of trials: " + str(len(study.trials)) + "\n")
         print(f"Results saved to {file_name}")
 
+        # Extract parameters for plotting
+        trials_data = []
+
+        for trial in study.trials:
+            trial_data = {"number": trial.number, "value": trial.value}
+            # Assuming your parameters are named 'orientation_weight_0', 'orientation_weight_1', ..., 'orientation_weight_7'
+            for key in sorted(trial.params.keys()):
+                trial_data[key] = trial.params[key]
+            trials_data.append(trial_data)
+
+        # Create a DataFrame for easier plotting
+        df_trials = pd.DataFrame(trials_data)
+
+        
+        # Save the trial data to CSV
+        csv_file_name = os.path.join(results_folder_opt_webcam, 'trial_data.csv')
+        df_trials.to_csv(csv_file_name, index=False)
+        print(f"Trial data saved to: {csv_file_name}")
+
+        # Set the trial number as index (optional)
+        df_trials.set_index('number', inplace=True)
+
+        # Plotting with 8 subplots for each orientation weight
+        n_params = 8  # Assuming there are 8 orientation weights
+        fig, axes = plt.subplots(n_params, 1, figsize=(12, 6), sharex=True)
+
+        # Plot each parameter in a separate subplot
+        for i in range(n_params):
+            param_key = f'orientation_weight_{i}'
+            if param_key in df_trials.columns:
+                axes[i].plot(df_trials.index, df_trials[param_key], label=param_key)
+                axes[i].set_title(param_key)
+                axes[i].set_ylabel('Value')
+                axes[i].grid()
+                axes[i].legend()
+
+        axes[-1].set_xlabel('Trial Number')  # Label the x-axis for the last subplot
+        plt.tight_layout()
+
+        # Save the subplot figure
+        plot_file_name = os.path.join(results_folder_opt_webcam, 'parameter_evolution_subplots.png')
+        plt.savefig(plot_file_name)
+
         # Run sensor fusion with best weights
         best_params = study.best_params
         orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
-        webcam_weights = [best_params[f'webcam_weight_{i}'] for i in range(12)]
+        webcam_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
 
         output = run_sensor_fusion(fusion_opt, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
@@ -884,16 +1012,21 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.savefig(results_folder_opt_webcam + '/mad_difference.png')
 
         # IMU and STEREOCAMERA WEIGHTS OPTIMIZATION
-        # Maske a folder to save optimization trials
+        # Make a folder to save optimization trials
         results_folder_opt_stereo = results_folder_opt + "imu_stereocamera/"
         if not os.path.exists(results_folder_opt_stereo):
             os.makedirs(results_folder_opt_stereo)
         # Optimization setup
         study_name = "imu_stereocamera_weights_tuning_study_" + subject_ID + "_" + trial_ID + "_" + str(nb_trials)
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
-        study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
+        #study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
+        search_space = {}
+        for i in range(8):
+            search_space[f"orientation_weight_{i}"] = (0, 1)
+        print("SEARCH_SPACE:", search_space)
+        study = optuna.create_study(direction='minimize', sampler=optuna.samplers.GridSampler(search_space))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
-        study.optimize(lambda trial: objective_imu_stereocamera(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_trials=nb_trials, n_jobs=10)
+        study.optimize(lambda trial: objective_imu_stereocamera(fusion_opt, trial, ground_truth_df, constraint_var, subject_ID, trial_ID), n_jobs=1)
 
 
         # Save best trial data in a file 
@@ -907,11 +1040,52 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
             f.write("\nNumber of trials: " + str(len(study.trials)) + "\n")
         print(f"Results saved to {file_name}")
 
+        # Extract parameters for plotting
+        trials_data = []
+
+        for trial in study.trials:
+            trial_data = {"number": trial.number, "value": trial.value}
+            # Assuming your parameters are named 'orientation_weight_0', 'orientation_weight_1', ..., 'orientation_weight_7'
+            for key in sorted(trial.params.keys()):
+                trial_data[key] = trial.params[key]
+            trials_data.append(trial_data)
+
+        # Create a DataFrame for easier plotting
+        df_trials = pd.DataFrame(trials_data)
+
+        # Save the trial data to CSV
+        csv_file_name = os.path.join(results_folder_opt_stereo, 'trial_data.csv')
+        df_trials.to_csv(csv_file_name, index=False)
+        print(f"Trial data saved to: {csv_file_name}")
+
+        # Set the trial number as index (optional)
+        df_trials.set_index('number', inplace=True)
+
+        # Plotting with 8 subplots for each orientation weight
+        n_params = 8  # Assuming there are 8 orientation weights
+        fig, axes = plt.subplots(n_params, 1, figsize=(12, 6), sharex=True)
+
+        # Plot each parameter in a separate subplot
+        for i in range(n_params):
+            param_key = f'orientation_weight_{i}'
+            if param_key in df_trials.columns:
+                axes[i].plot(df_trials.index, df_trials[param_key], label=param_key)
+                axes[i].set_title(param_key)
+                axes[i].set_ylabel('Value')
+                axes[i].grid()
+                axes[i].legend()
+
+        axes[-1].set_xlabel('Trial Number')  # Label the x-axis for the last subplot
+        plt.tight_layout()
+
+        # Save the subplot figure
+        plot_file_name = os.path.join(results_folder_opt_stereo, 'parameter_evolution_subplots.png')
+        plt.savefig(plot_file_name)
         # Run sensor fusion with best weights
         best_params = study.best_params
         orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
         webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
-        stereocamera_weights = [best_params[f'stereocamera_weight_{i}'] for i in range(15)]  #  Stereocamera weights taken into account
+        stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  #  Stereocamera weights taken into account
 
         output = run_sensor_fusion(fusion_opt, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
         # Save the results to mot file

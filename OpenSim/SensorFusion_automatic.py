@@ -717,6 +717,7 @@ def run_sensor_fusion(sensor_fusion, webcam_weights, orientation_weights, stereo
 
     # Initialize the model  
     # Realize position to ensure model is properly initialized
+    sensor_fusion.s = sensor_fusion.model.initSystem()  
     sensor_fusion.model.realizePosition(sensor_fusion.s)
 
     # Define the overlapping time range for combined mode
@@ -795,8 +796,8 @@ def run_sensor_fusion(sensor_fusion, webcam_weights, orientation_weights, stereo
     
     for i, time_val in enumerate(times):
         # Show progress every 10 frames or at the end
-        if i % 10 == 0 or i == numTimeSteps - 1:
-            print(f"Processing frame {i+1}/{numTimeSteps}: {time_val:.4f}s") 
+        #if i % 10 == 0 or i == numTimeSteps - 1:
+            #print(f"Processing frame {i+1}/{numTimeSteps}: {time_val:.4f}s") 
             
         # Set the state to current time
         sensor_fusion.s.setTime(time_val) 

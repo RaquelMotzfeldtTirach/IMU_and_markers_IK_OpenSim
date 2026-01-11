@@ -53,24 +53,16 @@ def main(ID):
     print("Trials: ", trials)
 
 
-    # Find time synchronization for each trial (not static for subject 92)
+    # Find time synchronization for each trial
     lags = {}
-    lags['static'] = 0  # No lag for static trial
     for trial in trials:
-        if trial != 'static':
             lag = time_synchronization(subject_ID=subject_id, trial_ID=trial)
             lags[trial] = lag
 
     print("lags: ", lags)
 
+
     # Run optimization for each trial
-
-    # TODO: should devide the IK in two parts: preparing everything -> only once before optuna, updating the weights and runing the IK -> many times with optuna and parallel computing! => TO BE TESTED!!!!
-    # TODO: devide the jobs between only imu, with webcam and with stereocamera (and analytics should have their own folders)
-    # TODO: save the raw data in a raw_data folder to always be able to retrieve it, untouchged 
-    # TODO: store the results and show the metrics and weights, etc in a nice way! jupiter notebook maybe :) 
-    # TODO: think about metrics and optimization equation: RMSE, MAE, R2, etc
-
     # Start with static trial since used for calibration
     weight_tuning_module(subject_ID=subject_id, trial_ID="static", subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags["static"], optimization=False)
 
@@ -78,7 +70,7 @@ def main(ID):
     for trial in trials:
         if trial != "static":
             weight_tuning_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags[trial])
-        else: 
+
             continue
 
 if __name__ == "__main__":

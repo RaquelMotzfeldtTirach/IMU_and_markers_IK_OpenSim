@@ -24,7 +24,7 @@ def read_mot_file(filepath):
                 data.append(row)
     return header, columns, np.array(data)
 
-def compare_mot_files(file1, file2, atol=1e-8):
+def compare_mot_files(file1, file2, atol=0):
     _, columns1, data1 = read_mot_file(file1)
     _, columns2, data2 = read_mot_file(file2)
     if columns1 != columns2:
