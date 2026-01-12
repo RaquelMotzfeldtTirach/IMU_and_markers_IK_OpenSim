@@ -26,6 +26,30 @@ target_joints_per_trial = {
     "finger_nose":["arm_flex_r", "arm_flex_l", "arm_add_r", "arm_add_l", "arm_rot_r", "arm_rot_l", "elbow_flex_r", "elbow_flex_l", "pro_sup_r", "pro_sup_l", "wrist_flex_r", "wrist_flex_l", "lumbar_extension", "lumbar_bending"],
     "clapping": ["arm_flex_r", "arm_flex_l", "arm_add_r", "arm_add_l", "arm_rot_r", "arm_rot_l", "elbow_flex_r", "elbow_flex_l", "pro_sup_r", "pro_sup_l", "wrist_flex_r", "wrist_flex_l", "lumbar_extension", "lumbar_bending"]
     }
+joints_of_interest = [
+    "arm_flex_r", "arm_flex_l", "arm_add_r", 
+    "arm_add_l", "arm_rot_r", "arm_rot_l", 
+    "elbow_flex_r", "elbow_flex_l", "pro_sup_r", 
+    "pro_sup_l", "wrist_flex_r", "wrist_flex_l", 
+    "lumbar_extension", "lumbar_bending", "lumbar_rotation"
+    ]
+max_range_of_motion_per_joint = {
+    "arm_flex_r": 270.0,
+    "arm_flex_l": 270.0,
+    "arm_add_r": 210.0,
+    "arm_add_l": 210.0,
+    "arm_rot_r": 180.0,
+    "arm_rot_l": 180.0,
+    "elbow_flex_r": 180.0,
+    "elbow_flex_l": 180.0,
+    "pro_sup_r": 180.0,
+    "pro_sup_l": 180.0,
+    "wrist_flex_r": 140.0,
+    "wrist_flex_l": 1.0,
+    "lumbar_extension": 180.0,
+    "lumbar_bending": 180.0,
+    "lumbar_rotation": 180.0
+}
 
 def standardize_df(df, exclude_cols=None, return_stats=False):
     """
@@ -386,6 +410,19 @@ def read_mot_file(filepath):
 def compare_joint_angles(df1, df2):
     return df1 - df2
 
+def normalize_error_rom(error_df):
+    """Normalize the error DataFrame with regards to max range of motion of each joint."""
+    normalized_error_df = error_df.copy()
+    for joint in error_df.columns:
+        if joint == 'time':
+            continue
+        max_rom = max_range_of_motion_per_joint.get(joint, None)
+        if max_rom is not None and max_rom != 0:
+            normalized_error_df[joint] = error_df[joint] / max_rom
+        else:
+            normalized_error_df[joint] = error_df[joint]  # leave unchanged if no max ROM defined
+    return normalized_error_df
+
 def downsample(groundtruth_df, time_vector): #TODO: check that this is working
     """Downsamples the ground truth DataFrame to match the time vector."""
     rows = []
@@ -423,17 +460,18 @@ def objective_imu_only(sensor_fusion, trial, ground_truth_df, constraint_var, su
         # Downsample ground truth to match the time vector of the latest IK results
         time_vector = latest_ik_results_df['time'].values
         ground_truth_df = downsample(ground_truth_df, time_vector)
-        # DATAFRAME downsample groundtruth df to match time vector of latest_ik_results_df # TODO!!!
+        # DATAFRAME downsample groundtruth df to match time vector of latest_ik_results_df 
 
         # Compare with ground truth
         error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
+
+        # Normalize error df with regards to max range of motion of each joint
+        error_df = normalize_error_rom(error_df)
 
         # Calculate the RMSE
         rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
         # Sum up the RMSE values only for the joints of interest
-        joints_of_interest = target_joints_per_trial[trial_ID]
-        #total = rmse.sum(axis=0)
         total = 0 
         for joint in joints_of_interest:
             total = total + rmse[joint]
@@ -469,16 +507,16 @@ def objective_imu_webcam(sensor_fusion, trial, ground_truth_df, constraint_var, 
         time_vector = latest_ik_results_df['time'].values
         ground_truth_df = downsample(ground_truth_df, time_vector)
 
-        # Compare with ground truth
+         # Compare with ground truth
         error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
+
+        # Normalize error df with regards to max range of motion of each joint
+        error_df = normalize_error_rom(error_df)
 
         # Calculate the RMSE
         rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
-        # Sum up the RMSE values
         # Sum up the RMSE values only for the joints of interest
-        joints_of_interest = target_joints_per_trial[trial_ID]
-        #total = rmse.sum(axis=0)
         total = 0 
         for joint in joints_of_interest:
             total = total + rmse[joint]
@@ -516,13 +554,13 @@ def objective_imu_stereocamera(sensor_fusion, trial, ground_truth_df, constraint
         # Compare with ground truth
         error_df = compare_joint_angles(ground_truth_df, latest_ik_results_df)
 
+        # Normalize error df with regards to max range of motion of each joint
+        error_df = normalize_error_rom(error_df)
+
         # Calculate the RMSE
         rmse = np.sqrt((error_df.drop(columns=['time'])**2).sum(axis=0) / len(latest_ik_results_df))
 
-        # Sum up the RMSE values
         # Sum up the RMSE values only for the joints of interest
-        joints_of_interest = target_joints_per_trial[trial_ID]
-        #total = rmse.sum(axis=0)
         total = 0 
         for joint in joints_of_interest:
             total = total + rmse[joint]
