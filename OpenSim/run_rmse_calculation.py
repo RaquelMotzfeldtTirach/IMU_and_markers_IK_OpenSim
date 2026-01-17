@@ -5,7 +5,7 @@ import os
 import shutil
 import argparse
 import glob
-from WeightsTuningModule import main as weight_tuning_module
+from RMSECalculationModule import main as rmse_calculation_module
 from TimeSynchronization import main as time_synchronization
 
 
@@ -51,7 +51,7 @@ def main(ID):
         file = file.removesuffix('.mtb')
         trials.append(file)
     print("Trials: ", trials)
-    trials = ['shoulder_rot']
+
 
     # Find time synchronization for each trial
     lags = {}
@@ -61,15 +61,10 @@ def main(ID):
 
     print("lags: ", lags)
 
-
-    # Run optimization for each trial
-    # Start with static trial since used for calibration
-    #weight_tuning_module(subject_ID=subject_id, trial_ID="static", subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags["static"], optimization=False)
-
     # Then run weight tuning for the rest of trials
     for trial in trials:
         if trial != "static":
-            weight_tuning_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags[trial])
+            rmse_calculation_module(subject_ID=subject_id, trial_ID=trial, subject_mass=info['weight'], subject_age=info['age'], subject_height=info['height'], subject_sex=info['sex'], lag=lags[trial], rmse=True)
 
             continue
 

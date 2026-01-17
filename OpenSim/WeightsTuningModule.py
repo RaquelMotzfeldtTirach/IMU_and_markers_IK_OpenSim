@@ -629,19 +629,19 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
     # Downsample ground truth to match the time vector of the latest IK results
     time_vector = latest_ik_results_df['time'].values.tolist()
-    ground_truth_df = downsample(ground_truth_df, time_vector)  ## TODO!!
+    ground_truth_df_downsampled = downsample(ground_truth_df, time_vector)  ## TODO!!
 
 
     ## ANALYTICS - Default weights
     # Compare with ground truth
-    error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df)
+    error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df_downsampled)
     # delete the column where error is 0
     error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
     error_df['time'] = time_vector
 
     # Evaluation metrics 
     # Range of Motion and difference in RoM between vicon and sensor fusion
-    rom_vicon_default = ground_truth_df.max() - ground_truth_df.min()
+    rom_vicon_default = ground_truth_df_downsampled.max() - ground_truth_df_downsampled.min()
     rom_fusion_default = latest_ik_results_df.max() - latest_ik_results_df.min()
     rom_error_default = rom_vicon_default - rom_fusion_default
     plt.figure(figsize=(10, 6))
@@ -689,6 +689,9 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
             os.makedirs(results_folder_opt)
         
         # Initialize Sensor Fusion for optimization
+        orientation_weights = [1.0] * 8
+        webcam_weights = [0.0] * 12  # Webcam not taken into account
+        stereocamera_weights = [0.0] * 15  #  Stereocamera not taken into account
         fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
 
         # IMU ONLY WEIGHTS OPTIMIZATION
@@ -702,7 +705,7 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         #study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
         search_space = {}
         for i in range(8):
-            search_space[f"orientation_weight_{i}"] = (0, 1)
+            search_space[f"orientation_weight_{i}"] = [0, 1]
         print("SEARCH_SPACE:", search_space)
         study = optuna.create_study(direction='minimize', sampler=optuna.samplers.GridSampler(search_space))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
@@ -768,8 +771,10 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         best_params = study.best_params
         orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
         webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
-        stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
+        stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocamera not taken into account
 
+        # Initialize Sensor Fusion for optimization
+        fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
         output = run_sensor_fusion(fusion_opt, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
         # Save the results to mot file
         output_file_name = results_folder_opt_imu + "ik_results_subject_"+str(fusion_opt.subject_ID)+"_trial_"+str(fusion_opt.trial_ID)+"_best_params.mot"
@@ -778,15 +783,19 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
         output_header, output_columns, output_df = read_mot_file(output_file_name)
 
+        # Downsample ground truth to match the time vector of the latest IK results
+        time_vector = output_df['time'].values.tolist()
+        ground_truth_df_downsampled = downsample(ground_truth_df, time_vector)
+
         # Compare with ground truth
-        error_df = compare_joint_angles(output_df, ground_truth_df)
+        error_df = compare_joint_angles(output_df, ground_truth_df_downsampled)
         # delete the column where error is 0
         error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
         error_df['time'] = time_vector
 
         # Evaluation metrics 
         # Range of Motion and difference in RoM between vicon and sensor fusion
-        rom_vicon = ground_truth_df.max() - ground_truth_df.min()
+        rom_vicon = ground_truth_df_downsampled.max() - ground_truth_df_downsampled.min()
         rom_fusion = output_df.max() - output_df.min()
         rom_error = rom_vicon - rom_fusion
         plt.figure(figsize=(10, 6))
@@ -823,64 +832,23 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.grid()
         plt.savefig(results_folder_opt_imu + '/mad_best_weights.png')
 
-        # Plot also the difference in RoMd, RMSE and MAD between default weights and best weights
-        rom_error_diff = rom_error_default - rom_error
-        plt.figure(figsize=(10, 6))
-        plt.bar(rom_error_diff.index, rom_error_diff.values)
-        error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df)
-        # delete the column where error is 0
-        error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
-        error_df['time'] = time_vector
-        
-
-        # Evaluation metrics 
-        # Range of Motion and difference in RoM between vicon and sensor fusion
-        rom_vicon_default = ground_truth_df.max() - ground_truth_df.min()
-        rom_fusion_default = latest_ik_results_df.max() - latest_ik_results_df.min()
-        rom_error_default = rom_vicon_default - rom_fusion_default
-        plt.figure(figsize=(10, 6))
-        plt.bar(rom_error_default.index, rom_error_default.values)
-        plt.xlabel('Joint Angles')
-        plt.xlabel('Joint Angles')
-        plt.ylabel('Difference in Range of Motion Error (degrees)')
-        plt.title('Difference in Range of Motion Error between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_imu + '/rom_error_difference.png')
-
-        rmse_diff = rmse_default - rmse
-        plt.figure(figsize=(10, 6))
-        plt.bar(rmse_diff.index, rmse_diff.values)
-        plt.xlabel('Joint Angles')
-        plt.ylabel('Difference in RMSE (degrees)')
-        plt.title('Difference in RMSE between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_imu + '/rmse_difference.png')
-
-        mad_diff = mad_default - mad
-        plt.figure(figsize=(10, 6))
-        plt.bar(mad_diff.index, mad_diff.values)
-        plt.xlabel('Joint Angles')  
-        plt.ylabel('Difference in MAD (degrees)')
-        plt.title('Difference in MAD between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_imu + '/mad_difference.png')
-
         # IMU and WEBCAM WEIGHTS OPTIMIZATION
         # Maske a folder to save optimization trials
         results_folder_opt_webcam = results_folder_opt + "imu_webcam/"
         if not os.path.exists(results_folder_opt_webcam):
             os.makedirs(results_folder_opt_webcam)
+
+        # Initialize Sensor Fusion for optimization
+        orientation_weights = [1.0] * 8
+        webcam_weights = [1.0] * 12  # Webcam not taken into account
+        stereocamera_weights = [0.0] * 15  #  Stereocamera not taken into account
+        fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+
         # Optimization setup
         study_name = "imu_webcam_weights_tuning_study_" + subject_ID + "_" + trial_ID + "_" + str(nb_trials)
         search_space = {}
         for i in range(8):
-            search_space[f"orientation_weight_{i}"] = (0, 1)
+            search_space[f"orientation_weight_{i}"] = [0, 1]
         print("SEARCH_SPACE:", search_space)
         study = optuna.create_study(direction='minimize', sampler=optuna.samplers.GridSampler(search_space))
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
@@ -945,8 +913,9 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         # Run sensor fusion with best weights
         best_params = study.best_params
         orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
-        webcam_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        stereocamera_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #  Stereocameranot taken into account
+        webcam_weights = [1.0] * 12  # webcam weights
+        stereocamera_weights = [0.0] * 15  #  Stereocamera not taken into account
+        fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
 
         output = run_sensor_fusion(fusion_opt, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
         # Save the results to mot file
@@ -956,15 +925,19 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
         output_header, output_columns, output_df = read_mot_file(output_file_name)
 
+        # Downsample ground truth to match the time vector of the latest IK results
+        time_vector = output_df['time'].values.tolist()
+        ground_truth_df_downsampled = downsample(ground_truth_df, time_vector)
+
         # Compare with ground truth
-        error_df = compare_joint_angles(output_df, ground_truth_df)
+        error_df = compare_joint_angles(output_df, ground_truth_df_downsampled)
         # delete the column where error is 0
         error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
         error_df['time'] = time_vector
 
         # Evaluation metrics 
         # Range of Motion and difference in RoM between vicon and sensor fusion
-        rom_vicon = ground_truth_df.max() - ground_truth_df.min()
+        rom_vicon = ground_truth_df_downsampled.max() - ground_truth_df_downsampled.min()
         rom_fusion = output_df.max() - output_df.min()
         rom_error = rom_vicon - rom_fusion
         plt.figure(figsize=(10, 6))
@@ -1001,66 +974,25 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.grid()
         plt.savefig(results_folder_opt_webcam + '/mad_best_weights.png')
 
-        # Plot also the difference in RoMd, RMSE and MAD between default weights and best weights
-        rom_error_diff = rom_error_default - rom_error
-        plt.figure(figsize=(10, 6))
-        plt.bar(rom_error_diff.index, rom_error_diff.values)
-        error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df)
-        # delete the column where error is 0
-        error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
-        error_df['time'] = time_vector
-        
-
-        # Evaluation metrics 
-        # Range of Motion and difference in RoM between vicon and sensor fusion
-        rom_vicon_default = ground_truth_df.max() - ground_truth_df.min()
-        rom_fusion_default = latest_ik_results_df.max() - latest_ik_results_df.min()
-        rom_error_default = rom_vicon_default - rom_fusion_default
-        plt.figure(figsize=(10, 6))
-        plt.bar(rom_error_default.index, rom_error_default.values)
-        plt.xlabel('Joint Angles')
-        plt.xlabel('Joint Angles')
-        plt.ylabel('Difference in Range of Motion Error (degrees)')
-        plt.title('Difference in Range of Motion Error between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_webcam + '/rom_error_difference.png')
-
-        rmse_diff = rmse_default - rmse
-        plt.figure(figsize=(10, 6))
-        plt.bar(rmse_diff.index, rmse_diff.values)
-        plt.xlabel('Joint Angles')
-        plt.ylabel('Difference in RMSE (degrees)')
-        plt.title('Difference in RMSE between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_webcam + '/rmse_difference.png')
-
-        mad_diff = mad_default - mad
-        plt.figure(figsize=(10, 6))
-        plt.bar(mad_diff.index, mad_diff.values)
-        plt.xlabel('Joint Angles')  
-        plt.ylabel('Difference in MAD (degrees)')
-        plt.title('Difference in MAD between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_webcam + '/mad_difference.png')
 
         # IMU and STEREOCAMERA WEIGHTS OPTIMIZATION
         # Make a folder to save optimization trials
         results_folder_opt_stereo = results_folder_opt + "imu_stereocamera/"
         if not os.path.exists(results_folder_opt_stereo):
             os.makedirs(results_folder_opt_stereo)
+        # Initialize Sensor Fusion for optimization
+        orientation_weights = [1.0] * 8
+        webcam_weights = [0.0] * 12  # Webcam not taken into account
+        stereocamera_weights = [1.0] * 15  #  Stereocamera not taken into account
+        fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
+
         # Optimization setup
         study_name = "imu_stereocamera_weights_tuning_study_" + subject_ID + "_" + trial_ID + "_" + str(nb_trials)
         #study = optuna.create_study(direction='minimize',storage="sqlite:///db.sqlite3", study_name=study_name, load_if_exists=True, sampler=TPESampler(multivariate=True))
         #study = optuna.create_study(direction='minimize', sampler=TPESampler(multivariate=True))
         search_space = {}
         for i in range(8):
-            search_space[f"orientation_weight_{i}"] = (0, 1)
+            search_space[f"orientation_weight_{i}"] = [0, 1]
         print("SEARCH_SPACE:", search_space)
         study = optuna.create_study(direction='minimize', sampler=optuna.samplers.GridSampler(search_space))
         # By default, Optuna uses Tree-structured Parzen Estimator algorithm implemented in TPESampler
@@ -1122,9 +1054,10 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         # Run sensor fusion with best weights
         best_params = study.best_params
         orientation_weights = [best_params[f'orientation_weight_{i}'] for i in range(8)]
-        webcam_weights = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Webcam not taken into account
-        stereocamera_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  #  Stereocamera weights taken into account
+        webcam_weights = [0.0] * 12  # Webcam not taken into account
+        stereocamera_weights = [1.0] * 15  #  Stereocamera weights taken into account
 
+        fusion_opt = sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
         output = run_sensor_fusion(fusion_opt, webcam_weights, orientation_weights, stereocamera_weights, constraint_var)
         # Save the results to mot file
         output_file_name = results_folder_opt_stereo + "ik_results_subject_"+str(fusion_opt.subject_ID)+"_trial_"+str(fusion_opt.trial_ID)+"_best_params.mot"
@@ -1133,15 +1066,19 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
 
         output_header, output_columns, output_df = read_mot_file(output_file_name)
 
+        # Downsample ground truth to match the time vector of the latest IK results
+        time_vector = output_df['time'].values.tolist()
+        ground_truth_df_downsampled = downsample(ground_truth_df, time_vector)
+
         # Compare with ground truth
-        error_df = compare_joint_angles(output_df, ground_truth_df)
+        error_df = compare_joint_angles(output_df, ground_truth_df_downsampled)
         # delete the column where error is 0
         error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
         error_df['time'] = time_vector
 
         # Evaluation metrics 
         # Range of Motion and difference in RoM between vicon and sensor fusion
-        rom_vicon = ground_truth_df.max() - ground_truth_df.min()
+        rom_vicon = ground_truth_df_downsampled.max() - ground_truth_df_downsampled.min()
         rom_fusion = output_df.max() - output_df.min()
         rom_error = rom_vicon - rom_fusion
         plt.figure(figsize=(10, 6))
@@ -1177,54 +1114,6 @@ def main(subject_ID=None, trial_ID=None, subject_mass=None, subject_height=None,
         plt.tight_layout()
         plt.grid()
         plt.savefig(results_folder_opt_stereo + '/mad_best_weights.png')
-
-        # Plot also the difference in RoMd, RMSE and MAD between default weights and best weights
-        rom_error_diff = rom_error_default - rom_error
-        plt.figure(figsize=(10, 6))
-        plt.bar(rom_error_diff.index, rom_error_diff.values)
-        error_df = compare_joint_angles(latest_ik_results_df, ground_truth_df)
-        # delete the column where error is 0
-        error_df = error_df.loc[:, (error_df != 0).any(axis=0)]
-        error_df['time'] = time_vector
-        
-
-        # Evaluation metrics 
-        # Range of Motion and difference in RoM between vicon and sensor fusion
-        rom_vicon_default = ground_truth_df.max() - ground_truth_df.min()
-        rom_fusion_default = latest_ik_results_df.max() - latest_ik_results_df.min()
-        rom_error_default = rom_vicon_default - rom_fusion_default
-        plt.figure(figsize=(10, 6))
-        plt.bar(rom_error_default.index, rom_error_default.values)
-        plt.xlabel('Joint Angles')
-        plt.xlabel('Joint Angles')
-        plt.ylabel('Difference in Range of Motion Error (degrees)')
-        plt.title('Difference in Range of Motion Error between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_stereo + '/rom_error_difference.png')
-
-        rmse_diff = rmse_default - rmse
-        plt.figure(figsize=(10, 6))
-        plt.bar(rmse_diff.index, rmse_diff.values)
-        plt.xlabel('Joint Angles')
-        plt.ylabel('Difference in RMSE (degrees)')
-        plt.title('Difference in RMSE between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_stereo + '/rmse_difference.png')
-
-        mad_diff = mad_default - mad
-        plt.figure(figsize=(10, 6))
-        plt.bar(mad_diff.index, mad_diff.values)
-        plt.xlabel('Joint Angles')  
-        plt.ylabel('Difference in MAD (degrees)')
-        plt.title('Difference in MAD between Default and Best Weights')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.grid()
-        plt.savefig(results_folder_opt_stereo + '/mad_difference.png')
     
 
 if __name__ == "__main__":
