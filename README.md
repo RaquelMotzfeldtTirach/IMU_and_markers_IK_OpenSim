@@ -70,4 +70,4 @@ Activate the conda environment
   ```sh
   conda activate opensim_scripting
   ```
-From there you can run any script you'd like from the OpenSim folder
+From there you can run any script you'd like from the OpenSim folder.
