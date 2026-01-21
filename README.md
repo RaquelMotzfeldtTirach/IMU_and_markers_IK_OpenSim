@@ -42,6 +42,9 @@ The framework includes automated data conversion, model calibration, temporal sy
 ## Data pre-processing
 This repo solely focuses on combining multi-modal data to then run inverse kinematics from OpenSim. The IK process is being optimized by tuning the weights used in the IK problem, according to a defined cost-function. 
 
+![image](https://github.com/RaquelMotzfeldtTirach/sensor_fusion/blob/main/System_Overview.png)
+
+
 Before one can start with multi-modal IK, one has to collect data or download a dataset. For the first alternative, there are three existing repos:
 - Body tracking using a webcam: https://github.com/RaquelMotzfeldtTirach/Mediapipe_OpenSim
 - Body tracking using a stereocamera: https://github.com/RaquelMotzfeldtTirach/ZED_stereocamera_OpenSim
