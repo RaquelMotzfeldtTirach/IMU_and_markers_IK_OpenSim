@@ -46,6 +46,7 @@ Before one can start with multi-modal IK, one has to collect data or download a 
 - Body tracking using a webcam: https://github.com/RaquelMotzfeldtTirach/Mediapipe_OpenSim
 - Body tracking using a stereocamera: https://github.com/RaquelMotzfeldtTirach/ZED_stereocamera_OpenSim
 - Body tracking with Xsens IMUs: https://github.com/RaquelMotzfeldtTirach/Xsens_mtw_OpenSim
+  
 Each individual repo also has the possibility to run IK, but only on one data type. For fusion, this is the repo you will need.
 Save all the data files in the following structure:
 - `recordings/`
