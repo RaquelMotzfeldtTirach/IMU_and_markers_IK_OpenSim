@@ -59,6 +59,8 @@ Save all the data files in the following structure:
     - `stereocamera_trial_ID.trc`
     - `vicon_trial_ID.trc` for the reference data recording with a MoCap system like Vicon
 
+Data recorded and used during our experiments can be found [HERE](https://dataverse.no/dataset.xhtml?persistentId=doi:10.18710/4EWI6I)
+
 ## Usage 
 ### Automatic
   ```sh
