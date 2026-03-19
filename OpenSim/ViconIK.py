@@ -88,17 +88,24 @@ class OpenSimVicon:
         correct_vicon_ref_frame(self.subject_ID, self.trial_ID)
         
 
-    def calibrate_model(self): 
-        # Vicon scaling and marker placement
-        calibrated_model_path = model_scaling_vicon(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
+    def calibrate_model(self, scaling_needed=True): 
+        if scaling_needed:
+            # Vicon scaling and marker placement
+            calibrated_model_path = model_scaling_vicon(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
 
-        self.model = osim.Model(calibrated_model_path)
-        self.s = self.model.initSystem()  
-        print("Model Mass:", self.model.getTotalMass(self.s))
+            self.model = osim.Model(calibrated_model_path)
+            self.s = self.model.initSystem()  
+            print("Model Mass:", self.model.getTotalMass(self.s))
 
-        nb_markers = self.model.getMarkerSet().getSize()
-        print(f"Model calibrated and scaled: {calibrated_model_path}")
-        print(f"Number of markers in the model: {nb_markers}")
+            nb_markers = self.model.getMarkerSet().getSize()
+            print(f"Model calibrated and scaled: {calibrated_model_path}")
+            print(f"Number of markers in the model: {nb_markers}")
+        else: 
+            self.model = osim.Model(self.model_path)
+            self.s = self.model.initSystem()  
+            print("Model Mass:", self.model.getTotalMass(self.s))
+            print(f"Model loaded without scaling: {self.model_path}")
+            calibrated_model_path = self.model_path  # Just return the original path if no scaling was done
 
         return calibrated_model_path
 
@@ -116,11 +123,18 @@ class OpenSimVicon:
         print(f"MarkersReference created from vicon markers")
 
 
-def main(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex):
+def main(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, subject_age, subject_sex, scaled_model_path=None):
     # Put log to level debug and show in terminal
     osim.Logger.setLevel(osim.Logger.Level_Info)
 
-    model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
+    if scaled_model_path:
+        scaling_needed = False
+        print(f"Using provided scaled model: {scaled_model_path}")
+    else:
+        scaling_needed = True
+        print(f"No scaled model provided, will perform scaling using default model: {model_path}")
+
+    model_path = scaled_model_path if scaled_model_path else 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
     model_name = 'Rajagopal'
     viconIK = OpenSimVicon(model_path, model_name, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex)
     viconIK.resultsDirectory = 'ViconIKResults'
@@ -131,10 +145,10 @@ def main(subject_ID, trial_ID, constraint_var, subject_mass, subject_height, sub
     # Get Vicon data
     viconIK.get_vicon_data()
 
-    # Calibrate the model
-    calibrated_model_path = viconIK.calibrate_model()
-    print(f"Calibrated model saved to: {calibrated_model_path}")
 
+    # Calibrate the model
+    calibrated_model_path = viconIK.calibrate_model(scaling_needed=scaling_needed)
+ 
 
     # Load the marker references
     viconIK.load_references()
@@ -362,7 +376,8 @@ if __name__ == "__main__":
     parser.add_argument("subject_height", type=float, help="Subject height in mm")
     parser.add_argument("subject_age", type=int, help="Subject age in years")
     parser.add_argument("subject_sex", type=str, choices=['M', 'F'], help="Subject sex (M/F)")
+    parser.add_argument("--model_path", type=str, default='OpenSim/Models/Rajagopal/Rajagopal_2015.osim', help="Path to the OpenSim model file")
 
     args = parser.parse_args()
 
-    main(args.subject_ID, args.trial_ID, args.constraint_var, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex)
+    main(args.subject_ID, args.trial_ID, args.constraint_var, args.subject_mass, args.subject_height, args.subject_age, args.subject_sex, scaled_model_path=args.model_path)

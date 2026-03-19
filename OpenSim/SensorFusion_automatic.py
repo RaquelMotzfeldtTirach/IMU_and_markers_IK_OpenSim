@@ -164,38 +164,54 @@ class OpenSimSensorFusion:
             print("✓ All stereocamera marker positions appear reasonable")
         
 
-    def calibrate_model(self): 
-        calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
-        # Webcam scaling and marker placement
-        if (max(self.webcam_weights) > 0 and max(self.stereocamera_weights) == 0):
-            calibrated_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
-        else:
-            # If no webcam markers are used, copy the original model
-            calibrated_model_path = self.model_path
-        # Stereocamera scaling and marker placement
-        if (max(self.stereocamera_weights) > 0 and max(self.webcam_weights) == 0):
-            calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
-        # If both Webcam and Stereocamera are being used
-        if (max(self.stereocamera_weights) > 0 and max(self.webcam_weights) > 0):
-            # run webcam scaling just to get markers 
-            webcam_markers_scaled = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path, just_for_markers=True)
-            # first calibrate model with stereocamera data
-            calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
-            # then add webcam markers (new placement) to model
-            calibrated_model_path = model_add_markers(calibrated_model_path, webcam_markers_scaled) 
+    def calibrate_model(self, scaling_needed=True): 
+        if scaling_needed:
+            calibrated_model_path = 'OpenSim/Models/Rajagopal/Calibrated_Rajagopal_subject' + str(self.subject_ID) +'_' + str(self.trial_ID) + '.osim'
+            # Webcam scaling and marker placement
+            if (max(self.webcam_weights) > 0 and max(self.stereocamera_weights) == 0):
+                calibrated_model_path = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, self.model_path)
+            else:
+                # If no webcam markers are used, copy the original model
+                calibrated_model_path = self.model_path
+            # Stereocamera scaling and marker placement
+            if (max(self.stereocamera_weights) > 0 and max(self.webcam_weights) == 0):
+                calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+            # If both Webcam and Stereocamera are being used
+            if (max(self.stereocamera_weights) > 0 and max(self.webcam_weights) > 0):
+                # run webcam scaling just to get markers 
+                webcam_markers_scaled = model_scaling_webcam(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path, just_for_markers=True)
+                # first calibrate model with stereocamera data
+                calibrated_model_path = model_scaling_stereocamera(self.subject_ID, self.trial_ID, self.subject_mass, self.subject_height, self.subject_age, self.subject_sex, calibrated_model_path)
+                # then add webcam markers (new placement) to model
+                calibrated_model_path = model_add_markers(calibrated_model_path, webcam_markers_scaled) 
 
-        # IMU calibration
-        if (max(self.orientation_weights) > 0):
-            calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID, visulizeCalibration = False)
+            # IMU calibration
+            if (max(self.orientation_weights) > 0):
+                calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID, visulizeCalibration = False)
+            
+
+            self.model = osim.Model(calibrated_model_path)
+            self.s = self.model.initSystem()  
+            print("Model Mass:", self.model.getTotalMass(self.s))
+
+            nb_markers = self.model.getMarkerSet().getSize()
+            print(f"Model calibrated and scaled: {calibrated_model_path}")
+            print(f"Number of markers in the model: {nb_markers}")
         
+        else:
+            calibrated_model_path = self.model_path
 
-        self.model = osim.Model(calibrated_model_path)
-        self.s = self.model.initSystem()  
-        print("Model Mass:", self.model.getTotalMass(self.s))
-
-        nb_markers = self.model.getMarkerSet().getSize()
-        print(f"Model calibrated and scaled: {calibrated_model_path}")
-        print(f"Number of markers in the model: {nb_markers}")
+            # IMU calibration
+            if (max(self.orientation_weights) > 0):
+                calibrated_model_path = imu_calibrate_model(calibrated_model_path, self.model_name, self.orientation_file, self.subject_ID, self.trial_ID, visulizeCalibration = False)
+            
+            
+            self.model = osim.Model(self.model_path)
+            self.s = self.model.initSystem()
+            print("Model Mass:", self.model.getTotalMass(self.s))
+            nb_markers = self.model.getMarkerSet().getSize()
+            print(f"Number of markers in the model: {nb_markers}")
+            print(f"Model loaded without scaling: {self.model_path}")
 
         return calibrated_model_path
 
@@ -644,11 +660,19 @@ class OpenSimSensorFusion:
             print(f"Combined marker weights: {[weights.get(i).getWeight() for i in range(weights.getSize())]}")
 
 
-def sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex):
+def sensor_fusion_initialization(webcam_weights, orientation_weights, stereocamera_weights, constraint_var, subject_ID, trial_ID, subject_mass, subject_height, subject_age, subject_sex, scaled_model_path = None):
     # Put log to level debug and show in terminal
     osim.Logger.setLevel(osim.Logger.Level_Info)
 
-    model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
+    if scaled_model_path is not None:
+        model_path = scaled_model_path
+        scaling_needed = False
+        print(f"Using provided scaled model: {model_path}")
+    else:
+        model_path = 'OpenSim/Models/Rajagopal/Rajagopal_2015.osim'
+        scaling_needed = True
+        print(f"No scaled model provided, using default model: {model_path}")
+
     model_name = 'Rajagopal'
     imu_to_opensim_rotation = Vec3(-pi/2, 0, 0) 
     sensor_fusion = OpenSimSensorFusion(model_path, model_name, subject_ID, trial_ID, imu_to_opensim_rotation, subject_mass, subject_height, subject_age, subject_sex)
@@ -678,7 +702,7 @@ def sensor_fusion_initialization(webcam_weights, orientation_weights, stereocame
     sensor_fusion.manual_downsampling()
 
     # Calibrate the model
-    calibrated_model_path = sensor_fusion.calibrate_model()
+    calibrated_model_path = sensor_fusion.calibrate_model(scaling_needed=scaling_needed)
     print(f"Calibrated model saved to: {calibrated_model_path}")
 
     # Correct IMU orientations
