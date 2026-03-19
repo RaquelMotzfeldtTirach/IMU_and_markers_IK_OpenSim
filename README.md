@@ -1,6 +1,6 @@
 # OpenSim Sensor Fusion for Human Motion Analysis
 
-This repository implements a multi-modal sensor fusion framework that combines IMU (Inertial Measurement Unit) data with webcam marker tracking for accurate human motion analysis. Using OpenSim's toolkit, it performs weighted inverse kinematics that leverages the strengths of both sensor types: IMUs provide continuous orientation data without occlusion issues, while optical markers offer precise 3D position information.
+This repository implements a multi-modal sensor fusion framework that combines IMU (Inertial Measurement Unit) data with Webcam and Stereocamera marker tracking for accurate human motion analysis. Using OpenSim's toolkit, it performs weighted inverse kinematics that leverages the strengths of both sensor types: IMUs provide continuous orientation data without occlusion issues, while optical markers offer precise 3D position information.
 
 The framework includes automated data conversion, model calibration, temporal synchronization, and configurable sensor weighting to produce robust motion capture results suitable for biomechanical research and clinical applications.
 
@@ -9,6 +9,8 @@ The framework includes automated data conversion, model calibration, temporal sy
   Utilities for converting and calibrating raw data from IMUs, webcam and stereocamera. And inverse kinematics with sensor fusion!
 - `recordings/`  
   Example log files, recordings and results
+- `analytics/`  
+  This is were the optimization outcomes are stored, with metrics and plots
 
 ## Requirements
 - Linux, ubuntu 24.04 (not tested on previous versions)
@@ -37,8 +39,37 @@ The framework includes automated data conversion, model calibration, temporal sy
   conda install -c opensim-org opensim
   ```
 
+## Data pre-processing
+This repo solely focuses on combining multi-modal data to then run inverse kinematics from OpenSim. The IK process is being optimized by tuning the weights used in the IK problem, according to a defined cost-function. 
+
+![image](https://github.com/RaquelMotzfeldtTirach/sensor_fusion/blob/main/System_Overview.png)
+
+
+Before one can start with multi-modal IK, one has to collect data or download a dataset. For the first alternative, there are three existing repos:
+- Body tracking using a webcam: https://github.com/RaquelMotzfeldtTirach/Mediapipe_OpenSim
+- Body tracking using a stereocamera: https://github.com/RaquelMotzfeldtTirach/ZED_stereocamera_OpenSim
+- Body tracking with Xsens IMUs: https://github.com/RaquelMotzfeldtTirach/Xsens_mtw_OpenSim
+  
+Each individual repo also has the possibility to run IK, but only on one data type. For fusion, this is the repo you will need.
+Save all the data files in the following structure:
+- `recordings/`
+  - `SubjectXX/`
+    - `imu_trial_ID/` - for the IMU .txt files 
+    - `webcam_trial_ID.trc` 
+    - `stereocamera_trial_ID.trc`
+    - `vicon_trial_ID.trc` for the reference data recording with a MoCap system like Vicon
+
+Data recorded and used during our experiments can be found [HERE](https://dataverse.no/dataset.xhtml?persistentId=doi:10.18710/4EWI6I)
 
 ## Usage 
-
+### Automatic
+  ```sh
+  ./script.sh
+  ```
+And give it the suject ID
+### Manual
+Activate the conda environment
+  ```sh
   conda activate opensim_scripting
-  
+  ```
+From there you can run any script you'd like from the OpenSim folder.
